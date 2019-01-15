@@ -26,7 +26,7 @@ let A = acc.getAccumulator()
 //console.log(expProof)
 //console.log(acc.verifyCofactor(expProof, 2))
 
-acc.addBlock(b1)
+//acc.addBlock(b1)
 A = acc.getAccumulator()
 A = acc.getAccumulatorByRange(0)
 
@@ -37,21 +37,21 @@ A = acc.getAccumulatorByRange(0)
 // console.log(acc._isContained(5, acc._getCofactor(5, 0, 1).toString(), A))
 // console.log(acc._isContained(1300931, acc._getCofactor(1300931, 0, 1).toString(), A))
 
-acc.addBlock(b2)
-acc.addBlock(b3)
+//acc.addBlock(b2)
+//acc.addBlock(b3)
 console.log(acc.ids)
 // acc.generateInclusionWitnesses().forEach((e)=>{
 //   console.log(e.toString())
 // })
 
-// acc.sltInclusionWitnesses().forEach((e)=>{
+// acc.altInclusionWitnesses().forEach((e)=>{
 //   console.log(e.toString())
 // })
 
-//acc.generateInclusionWitnesses()
-acc.initPrimes().forEach((e)=>{
-  console.log(e)
-})
+acc.generateInclusionWitnesses()
+// acc.initPrimes().forEach((e)=>{
+//   console.log(e)
+// })
 //acc.altInclusionWitnesses()
 
 // A = acc.getAccumulatorByRange(2)

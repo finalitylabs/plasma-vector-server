@@ -2,9 +2,11 @@
 
 const bigInt = require("big-integer")
 const utils = require('web3-utils')
+const PoKE_H2P = require('./PoKE_H2P')
 
 // TODO NI-PoKE* proof of exponent knowledge scheme
 
+// Vitalik proposal
 // for generator g, element to be proven included/excluded v
 // let x = cofactor of v
 // let h = g^v, z = h^x
@@ -16,9 +18,8 @@ const utils = require('web3-utils')
 // verification: 
 // b^B * h^r = z
 // z = h^B*floor(x/B)+x mod B = h^x
-//
 
-const VLEN = 100000
+const VLEN = 100000 // todo: 2^48
 
 function _idToPrime(id) {
   let prime
@@ -36,7 +37,7 @@ function _generatePrimeCheckpoints() {
       // map index to prime t
       primes[n] = t
       if(n.mod(100).equals(0)){
-        console.log(t.toString())
+        //console.log(t.toString())
         checkpoints.push({n,t})
       }
     }
@@ -64,7 +65,13 @@ function _addElement(element, accumulator, N) {
   return accumulator.modPow(element.toString(), N.toString())
 }
 
-function addElements(elements, accumulator) {
+function _deleteElement(v) {
+  v = bigInt(v)
+  console.log('deleting element: '+v+' from accumulator: '+this.A.toString())
+  this.A = this.A.divide(v.toString()) 
+}
+
+function _addElements(elements, accumulator) {
   console.log('adding list of txs to accumulator')
   let accumElems = bigInt(1)
   for(var i=0; i<elements.length; i++) {
@@ -73,12 +80,12 @@ function addElements(elements, accumulator) {
   return accumulator.modPow(accumElems.toString(), N.toString())
 }
 
-function isContained(element, accumulator, cofactor) {
+function _isContained(element, accumulator, cofactor) {
   let res = g.modPow(element.multiply(cofactor).toString(), N.toString())
   return res.equals(accumulator.toString())
 }
 
-function verifyCofactor(proof, v, A){
+function _verifyCofactor(proof, v, A){
   let h = g.modPow(v, N)
   let B = bigInt(utils.hexToNumberString(utils.soliditySha3(g.toString(), A.toString(), h.toString())))
   let z = proof.b.modPow(B, N)
@@ -108,14 +115,18 @@ function _getInclusionWitness(v, block){
   return {b:b,r:r}
 }
 
-function _getPoE(x) {
-  let pi = bigInt()
-  return pi
+function _getPoE(x, z) {
+  let Q = bigInt()
+  let r = bigInt()
+  let poke = new PoKE_H2P()
+  let l = poke.hash() //todo
+  let alpha // sha(u, w, z, l)
+  return {z,Q,r} // {z, Q, r}
 }
 
 // js Math.log return the ln(x) we must convert
 // log_b(x) = ln(x) / ln(b)
-function logB(val, b) {
+function _logB(val, b) {
   console.log('log A = ' + Math.log(val) / Math.log(b))
   return Math.round(Math.log(val) / Math.log(b))
 }
@@ -131,17 +142,6 @@ class RSAaccumulator {
 
   initPrimes() {
     return _generatePrimeCheckpoints()
-  }
-
-  addElement(v) {
-    v = bigInt(v)
-    this.A = _addElement(v.toString() ,this.A, this.N.toString())
-  }
-
-  deleteElement(v) {
-    v = bigInt(v)
-    console.log('deleting element: '+v+' from accumulator: '+this.A.toString())
-    this.A = this.A.divide(v.toString()) 
   }
 
   addBlock(block) {
@@ -183,24 +183,27 @@ class RSAaccumulator {
 
   // following notation from bunnz / boneh
   generateInclusionWitnesses(){
-    let w = []
+    let z = [] // g^x
     let x = [] // cofactors
+    let pi = [] // {z, Q, r}
     for(var i=0; i<this.ids.length; i++){
-      let wit = this.g
+      let _z = this.g
       let cof = bigInt(1)
       for(var j=0; j<this.ids.length; j++){
         if(j!=i){
           cof = cof.multiply(this.ids[j])
-          wit = wit.modPow(this.ids[j], this.N)
+          _z = _z.modPow(this.ids[j], this.N)
         }
       }
       x.push(cof)
-      w.push(wit)
+      z.push(_z)
+      // TODO: get PoE pi
+      pi.push(_getPoE(cof, _z))
     }
     // console.log(x[0].toString())
     // console.log(this.g.modPow(x[0], this.N).toString())
     // console.log(w[0].toString())
-    return w
+    return z
   }
 
   altInclusionWitnesses(){
