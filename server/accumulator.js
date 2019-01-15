@@ -68,7 +68,7 @@ function _addElement(element, accumulator, N) {
 function _deleteElement(v) {
   v = bigInt(v)
   console.log('deleting element: '+v+' from accumulator: '+this.A.toString())
-  this.A = this.A.divide(v.toString()) 
+  this.A = _getInclusionWitness(v).z
 }
 
 function _addElements(elements, accumulator) {
@@ -101,18 +101,21 @@ function _verifyCofactor(proof, v, A){
 // uses NI-PoKE* proof of exponentiation so that recipients 
 // of the proof don't need to witness the entire [g...A]
 // currently only works for a prime included once
-function _getInclusionWitness(v, block){
-  let h = g.modPow(v, N)
-  let B = bigInt(utils.hexToNumberString(utils.soliditySha3(g.toString(),_A.toString(), h.toString())))
-  // get cofactor somehow, perhaps check full tx records of request A range and... or
-  // compute x given (g, A, v). Can't do this given mod N
-  // grab transactions and generate x
+function _getInclusionWitness(v){
+  let z = this.g // g^x
+  let x = bigInt(1) // cofactors
+  let pi // {z, Q, r}
 
-  let _x = getCofactor(0, 1)
+  for(var j=0; j<this.ids.length; j++){
+    if(j!=v){
+      x = x.multiply(this.ids[j])
+      z = z.modPow(this.ids[j], this.N)
+    }
+  }
 
-  let b = h.modPow(_x.divide(B), N)
-  let r = _x.mod(B)
-  return {b:b,r:r}
+  // TODO: get PoE pi
+  pi = _getPoE(x, z)
+  return {pi, x, z}
 }
 
 function _getPoE(x, z) {
@@ -179,6 +182,10 @@ class RSAaccumulator {
       }
     }
     return xv.divide(v)
+  }
+
+  getSingleInclusionWitness(v) {
+    return _getInclusionWitness(v)
   }
 
   // following notation from bunnz / boneh
