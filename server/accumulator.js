@@ -66,7 +66,7 @@ function _addElement(element, accumulator, N) {
 function _deleteElement(v) {
   v = bigInt(v)
   console.log('deleting element: '+v+' from accumulator: '+this.A.toString())
-  this.A = _getInclusionWitness(v).z
+  this.A_i = _getInclusionWitness(v).z
 }
 
 function _addElements(elements, accumulator) {
@@ -84,14 +84,14 @@ function _isContained(element, accumulator, cofactor) {
 }
 
 function _verifyCofactor(proof, v, A){
-  let h = g.modPow(v, N)
-  let B = bigInt(utils.hexToNumberString(utils.soliditySha3(g.toString(), A.toString(), h.toString())))
-  let z = proof.b.modPow(B, N)
-  let c = h.modPow(proof.r, N)
+  // let h = g.modPow(v, N)
+  // let B = bigInt(utils.hexToNumberString(utils.soliditySha3(g.toString(), A.toString(), h.toString())))
+  // let z = proof.b.modPow(B, N)
+  // let c = h.modPow(proof.r, N)
 
-  let c1 = z.multiply(c).mod(N)
-  let c2 = A.mod(N)
-  return c1.equals(c2)
+  // let c1 = z.multiply(c).mod(N)
+  // let c2 = A.mod(N)
+  // return c1.equals(c2)
 }
 
 // as per Xuanji's suggestion, let's keep x local to the operator, 
@@ -99,21 +99,21 @@ function _verifyCofactor(proof, v, A){
 // uses NI-PoKE* proof of exponentiation so that recipients 
 // of the proof don't need to witness the entire [g...A]
 // currently only works for a prime included once
-function _getInclusionWitness(v){
-  let z = this.g // g^x
+function _getInclusionWitness(v, ids, g, N){
+  let z = g // g^x
   let x = bigInt(1) // cofactors
   let pi // {z, Q, r}
 
-  for(var j=0; j<this.ids.length; j++){
+  for(var j=0; j<ids.length; j++){
     if(j!=v){
-      x = x.multiply(this.ids[j])
-      z = z.modPow(this.ids[j], this.N)
+      x = x.multiply(ids[j])
+      z = z.modPow(ids[j], N)
     }
   }
 
   // TODO: get PoE pi
-  pi = _getPoE(x, z)
-  return {pi, x, z}
+  pi = [v, _getPoE(x, z, N)]
+  return pi
 }
 
 function _getPoE(x, z, N) {
@@ -144,7 +144,8 @@ class RSAaccumulator {
   constructor(g, N) {
     this.g = bigInt(g)
     this.N = bigInt(N)
-    this.A = this.g
+    this.A_i = this.g
+    this.A_e = this.g
     this.blocks = []
     this.ids = []
   }
@@ -157,18 +158,18 @@ class RSAaccumulator {
     console.log('adding list of txs to accumulator')
     let accumElems = bigInt(1)
     for(var i=0; i<block.length; i++) {
-      this.A = _addElement(block[i] ,this.A, this.N)
+      this.A_i = _addElement(block[i] ,this.A_i, this.N)
       this.ids.push(block[i])
     }
-    block.unshift(this.A.toString())
+    block.unshift(this.A_i.toString())
     this.blocks.push(block)
   }
 
-  getAccumulator() {
-    return this.A
+  getAccumulators() {
+    return [this.A_i, this.A_e]
   }
 
-  getAccumulatorByRange(e) {
+  getAccumulatorsByRange(e) {
     return bigInt(this.blocks[e][0])
   }
 
@@ -190,12 +191,12 @@ class RSAaccumulator {
     return xv.divide(v)
   }
 
-  getSingleInclusionWitness(v) {
-    return _getInclusionWitness(v)
+  getSingleInclusionProof(v) {
+    return _getInclusionWitness(bigInt(v), this.ids, this.g, this.N)
   }
 
   // following notation from bunnz / boneh
-  generateInclusionWitnesses(){
+  generateInclusionProofs(){
     let z = [] // g^x
     let x = [] // cofactors
     let pi = [] // {z, Q, r}
@@ -211,61 +212,59 @@ class RSAaccumulator {
       }
       x.push(cof)
       z.push(_z)
-      // TODO: get PoE pi
-      pi.push(_getPoE(cof, _z, this.N))
+      pi.push([this.ids[i],_getPoE(cof, _z, this.N)])
     }
-    // console.log(x[0].toString())
-    // console.log(this.g.modPow(x[0], this.N).toString())
-    // console.log(w[0].toString())
-    console.log(pi)
-    return z
+    return pi
   }
 
-  altInclusionWitnesses(){
-    let x = []
-    let p = []
-    for(var i=0; i<this.ids.length; i++){
-      let _p = bigInt(3)
-      _p = _p.modPow(this.ids[i], this.N)
-      //console.log(_p)
-      p.push(_p)
-    }
-    console.log('-----')
-    for(var i=0; i<this.ids.length; i++){
-      let wit = bigInt(1)
-      let count = bigInt(1)
-      let count2 = bigInt(0)
-      for(var j=0; j<this.ids.length; j++){
-        if(j!=i){
-          wit = wit.multiply(p[j]).mod(this.N)
-          count = count.multiply(this.ids[j])
-          count2 = count2.plus(this.ids[j])
-          //console.log(count)
-          //console.log(wit)
-        }
-      }
-      count = count.minus(count2)
-      let e = this.g.modPow(count, this.N)
-      wit = wit.multiply(e).mod(this.N)
-      x.push(wit)
-    }
-
-    return x
-  }
+  // altInclusionWitnesses(){
+  //   let x = []
+  //   let p = []
+  //   for(var i=0; i<this.ids.length; i++){
+  //     let _p = bigInt(3)
+  //     _p = _p.modPow(this.ids[i], this.N)
+  //     p.push(_p)
+  //   }
+  //   console.log('-----')
+  //   for(var i=0; i<this.ids.length; i++){
+  //     let wit = bigInt(1)
+  //     let count = bigInt(1)
+  //     let count2 = bigInt(0)
+  //     for(var j=0; j<this.ids.length; j++){
+  //       if(j!=i){
+  //         wit = wit.multiply(p[j]).mod(this.N)
+  //         count = count.multiply(this.ids[j])
+  //         count2 = count2.plus(this.ids[j])
+  //       }
+  //     }
+  //     count = count.minus(count2)
+  //     let e = this.g.modPow(count, this.N)
+  //     wit = wit.multiply(e).mod(this.N)
+  //     x.push(wit)
+  //   }
+  //   return x
+  // }
 
   // [g^2, g^3, g^5]
 
   // verifies the cofactor proof for a given range
-  verifyCofactor(proof, v){
-    let h = this.g.modPow(v, this.N)
-    let B = bigInt(utils.hexToNumberString(utils.soliditySha3(this.g.toString(), proof.A, h.toString())))
+  verifyPoKE(proof, v){
+    let poke = new PoKE_H2P()
+    let l = poke.hash(3, proof[1].z) // H_prime(u,w,z)
+    let alpha = utils.soliditySha3 // sha(u, w, z, l)
+    (
+      { type: 'uint256', value: this.g.toString() },
+      { type: 'bytes', value: utils.toHex(proof[1].z.toString()) },
+      { type: 'uint256', value: l.toString() }
+    )
 
-    let z = proof.b.modPow(B, this.N)
-    let c = h.modPow(proof.r, this.N)
-
-    let c1 = z.multiply(c).mod(this.N)
-    let c2 = bigInt(proof.A).mod(this.N)
-    return c1.equals(c2)
+    let a = bigInt(utils.hexToNumberString(alpha))
+    // check: Q^l*u^r*g^alpha*r = w*z^alpha
+    let left = proof[1].Q.modPow(l, this.N).multiply(this.g.modPow(proof[1].r, this.N).multiply(this.g.modPow(a.multiply(proof[1].r), this.N))).mod(this.N)
+    //console.log(left.toString())
+    let right = proof[1].z.multiply(proof[1].z.modPow(a, this.N)).mod(this.N)
+    //console.log(right.toString())
+    return left.equals(right)
   }
 
 }

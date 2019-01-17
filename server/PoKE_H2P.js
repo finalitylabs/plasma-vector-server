@@ -31,7 +31,7 @@ class PoKE_H2P {
       if(bit64.isPrime()) break
       j++
     }
-    console.log('h2p preimage: '+ z.toString() + ' output: ' + bit64.toString())
+    //console.log('h2p preimage: '+ z.toString() + ' output: ' + bit64.toString())
     return bit64
   }
 }

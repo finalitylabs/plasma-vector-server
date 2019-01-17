@@ -16,7 +16,7 @@ let b2 = [7, 5, 16369, 104849, 1300931, '32416187899', '32416188517', '324161886
 let b3 = ['2997635304785533129', '2129620256793959569', '2432064126451395277', '514175537678074399', '514175537678074399', '514175537678074399', '514175537678074399']
 
 acc.addBlock(b0)
-let A = acc.getAccumulator()
+let A = acc.getAccumulators()
 //console.log(acc.getInclusionWitnesses())
 
 // console.log(acc._isContained(5, acc._getCofactor(5, 0, 0).toString(), A))
@@ -27,8 +27,8 @@ let A = acc.getAccumulator()
 //console.log(acc.verifyCofactor(expProof, 2))
 
 acc.addBlock(b1)
-A = acc.getAccumulator()
-A = acc.getAccumulatorByRange(0)
+A = acc.getAccumulators()
+A = acc.getAccumulatorsByRange(0)
 
 //expProof = acc.getInclusionWitness(1300931,0,1)
 //console.log(acc.verifyCofactor(expProof, 1300931))
@@ -37,7 +37,7 @@ A = acc.getAccumulatorByRange(0)
 // console.log(acc._isContained(5, acc._getCofactor(5, 0, 1).toString(), A))
 // console.log(acc._isContained(1300931, acc._getCofactor(1300931, 0, 1).toString(), A))
 
-//acc.addBlock(b2)
+acc.addBlock(b2)
 //acc.addBlock(b3)
 console.log(acc.ids)
 // acc.generateInclusionWitnesses().forEach((e)=>{
@@ -48,17 +48,13 @@ console.log(acc.ids)
 //   console.log(e.toString())
 // })
 
-acc.generateInclusionWitnesses()
+let pi = acc.generateInclusionProofs()
+console.log('Proof of exponentiation: ' + JSON.stringify(pi[1]))
+pi = acc.getSingleInclusionProof(3)
+console.log('Single element proof: ' + JSON.stringify(pi))
 // acc.initPrimes().forEach((e)=>{
 //   console.log(e)
 // })
 //acc.altInclusionWitnesses()
 
-// A = acc.getAccumulatorByRange(2)
-
-// expProof = acc.getInclusionWitness('32416188647',0,2)
-// console.log(acc.verifyCofactor(expProof, '32416188647'))
-// console.log(expProof)
-
-// console.log(acc._isContained(25, acc._getCofactor(25, 0, 2).toString(), A))
-// console.log(acc._isContained('32416188647', acc._getCofactor('32416188647', 0, 2).toString(), A))
+console.log(acc.verifyPoKE(pi))
