@@ -116,12 +116,20 @@ function _getInclusionWitness(v){
   return {pi, x, z}
 }
 
-function _getPoE(x, z) {
-  let Q = bigInt()
-  let r = bigInt()
+function _getPoE(x, z, N) {
   let poke = new PoKE_H2P()
-  let l = poke.hash(3, z) //todo
-  let alpha // sha(u, w, z, l)
+  let g = bigInt(3)
+  let l = poke.hash(3, z)
+  let alpha  = utils.soliditySha3 // sha(u, w, z, l)
+  (
+    { type: 'uint256', value: g.toString() },
+    { type: 'bytes', value: utils.toHex(z.toString()) },
+    { type: 'uint256', value: l.toString() }
+  )
+  let a = bigInt(utils.hexToNumberString(alpha))
+  let q = x.divide(l)
+  let r = x.mod(l) 
+  let Q = g.modPow(q, N).multiply(g.modPow(q.multiply(a), N)).mod(N)// (u^q)(g^alpha*q)
   return {z,Q,r} // {z, Q, r}
 }
 
@@ -194,6 +202,7 @@ class RSAaccumulator {
     for(var i=0; i<this.ids.length; i++){
       let _z = this.g
       let cof = bigInt(1)
+      // todo: replace with call to _getInclusionWitness
       for(var j=0; j<this.ids.length; j++){
         if(j!=i){
           cof = cof.multiply(this.ids[j])
@@ -203,11 +212,12 @@ class RSAaccumulator {
       x.push(cof)
       z.push(_z)
       // TODO: get PoE pi
-      pi.push(_getPoE(cof, _z))
+      pi.push(_getPoE(cof, _z, this.N))
     }
     // console.log(x[0].toString())
     // console.log(this.g.modPow(x[0], this.N).toString())
     // console.log(w[0].toString())
+    console.log(pi)
     return z
   }
 

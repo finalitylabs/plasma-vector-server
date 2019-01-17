@@ -26,7 +26,7 @@ let A = acc.getAccumulator()
 //console.log(expProof)
 //console.log(acc.verifyCofactor(expProof, 2))
 
-//acc.addBlock(b1)
+acc.addBlock(b1)
 A = acc.getAccumulator()
 A = acc.getAccumulatorByRange(0)
 

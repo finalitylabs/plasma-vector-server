@@ -20,7 +20,7 @@ class PoKE_H2P {
       } else {
         h = utils.soliditySha3(
           { type: 'uint256', value: g },
-          { type: 'bytes', value: utils.toHex(new BN(z.toString())) },
+          { type: 'bytes', value: utils.toHex(z.toString()) },
           { type: 'uint256', value: j },
         )
       }
