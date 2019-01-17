@@ -37,7 +37,6 @@ function _generatePrimeCheckpoints() {
       // map index to prime t
       primes[n] = t
       if(n.mod(100).equals(0)){
-        //console.log(t.toString())
         checkpoints.push({n,t})
       }
     }
@@ -52,7 +51,6 @@ function _hashFromCheckpoint(start, i, next){
     let t = bigInt(z)
     if(t.isPrime()){
       if(n.equals(i)){
-        console.log(t.toString())
         return t
       }
     }
@@ -122,7 +120,7 @@ function _getPoE(x, z) {
   let Q = bigInt()
   let r = bigInt()
   let poke = new PoKE_H2P()
-  let l = poke.hash() //todo
+  let l = poke.hash(3, z) //todo
   let alpha // sha(u, w, z, l)
   return {z,Q,r} // {z, Q, r}
 }
