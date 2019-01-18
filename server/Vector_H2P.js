@@ -18,7 +18,7 @@ function hex2bin(hex){
   let bin5 = parseInt(hex5, 16).toString(2).padStart(8, '0')
 
   // todo debug this
-  let bin = bin1+bin2+bin3+bin4+bin5+'0101010101'
+  let bin = bin1+bin2+bin3+bin4+bin5+'0'
 
   return bin;
 }
@@ -51,8 +51,8 @@ class Vector_H2P {
       { type: 'uint256', value: input.amt })
 
     let bin = hex2bin(h.slice(2,66))
-    // getCheckpointIndex(input.index)
-    let p_total = getNextPrimes(1, index[0], bigInt(input.primecheck), 256)
+    // getCheckpointIndex(input.index) // hardcoded at 700 for now
+    let p_total = getNextPrimes(700, index[0], bigInt(input.checkpoint), 256)
 
     let p_i = [] // corrisponding primes for vector postions with 1 in A_i
     let p_e = [] // corrisponding primes for vector postions with 0 in A_e

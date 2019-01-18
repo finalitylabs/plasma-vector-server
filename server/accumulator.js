@@ -23,7 +23,7 @@ const N = bigInt('25195908475657893494027183240048398571429282126204032027777137
 // b^B * h^r = z
 // z = h^B*floor(x/B)+x mod B = h^x
 
-const VLEN = 100000 // todo: 2^48
+const VLEN = 1000 // todo: 2^48
 
 function _idToPrime(id) {
   let prime
@@ -34,32 +34,20 @@ function _idToPrime(id) {
 function _generatePrimeCheckpoints() {
   let checkpoints = []
   let primes = []
-  let n = bigInt(1)
-  for(var i=3; i<VLEN; i+=2) {
-    let t = bigInt(i)
-    if(t.isPrime()){
-      // map index to prime t
-      primes[n] = t
-      if(n.mod(100).equals(0)){
-        checkpoints.push({n,t})
-      }
-    }
-    n = n.plus(1)
-  }
-  return checkpoints
-}
+  let lastPrime = bigInt(3)
+  checkpoints.push({index:1, prime:3})
 
-function _hashFromCheckpoint(start, i, next){
-  for(var z=start; z<next; z+=2) {
-    let n = bigInt(start)
-    let t = bigInt(z)
-    if(t.isPrime()){
-      if(n.equals(i)){
-        return t
-      }
+  for(var j=2; j<VLEN; j++){
+    while(true) {
+      lastPrime = lastPrime.plus(2)
+      if(lastPrime.isPrime()) break
     }
-    n = n.plus(1)
+    if(j%100 === 0) {
+      checkpoints.push({index:j, prime:lastPrime})
+    }
   }
+
+  return checkpoints
 }
 
 function _addElement(element, accumulator) {
@@ -123,12 +111,22 @@ function _getInclusionWitness(v, ids){
 function _getPoE(x, z) {
   let poke = new PoKE_H2P()
   let l = poke.hash(g, z)
-  let alpha  = utils.soliditySha3 // sha(u, w, z, l)
-  (
-    { type: 'uint256', value: g.toString() },
-    { type: 'bytes', value: utils.toHex(z.toString()) },
-    { type: 'uint256', value: l.toString() }
-  )
+  let alpha
+  if(z.toString().length <= 3) {
+    alpha = utils.soliditySha3 // sha(u, w, z, l)
+    (
+      { type: 'uint256', value: g.toString() },
+      { type: 'uint256', value: z.toString() },
+      { type: 'uint256', value: l.toString() }
+    )
+  } else {
+    alpha = utils.soliditySha3 // sha(u, w, z, l)
+    (
+      { type: 'uint256', value: g.toString() },
+      { type: 'bytes', value: utils.toHex(z.toString()) },
+      { type: 'uint256', value: l.toString() }
+    ) 
+  }
   let a = bigInt(utils.hexToNumberString(alpha))
   let q = x.divide(l)
   let r = x.mod(l) 
@@ -140,6 +138,28 @@ function _convertIndex(i) {
   let start = i*256
   let end = (i+1)*256
   return [start, end]
+}
+
+  // (bytes) TX { prevBlock, from, to, amt, sig }
+function  verifyTX(tx, blocks, A_i, A_e) {
+  let vector = new Vector_H2P()
+  let previousBlock
+  let previousTX
+  if(tx.inputs[0] !== 0) {
+    previousBlock = blocks[tx.inputs[0]]
+    previousTX = previousBlock[tx.inputs[1]]
+    let i = _convertIndex(tx.index)
+    let previousPrimes = vector.hash(i, previousTX)
+  }
+  // todo abi pack tx to bytes?
+  let i = _convertIndex(tx.index)
+  previousTX = {checkpoint: 1, index: 1, inputs:[0,0], from:'0x1e8524370B7cAf8dC62E3eFfBcA04cCc8e493FfE', to:'0x1e8524370B7cAf8dC62E3eFfBcA04cCc8e493FfE', amt:0.0001, sig:'0x1337'}
+  let newPrimes = vector.hash(i, previousTX)
+  return newPrimes
+
+  // todo check primes included and sig matches
+  // todo delete verified tx previousPrimes from A
+  // return [A`,newPrimes]
 }
 
 // js Math.log return the ln(x) we must convert
@@ -163,13 +183,31 @@ class RSAaccumulator {
 
   addBlock(block) {
     console.log('adding list of txs to accumulator')
-    let accumElems = bigInt(1)
-    for(var i=0; i<block.length; i++) {
-      this.A_i = _addElement(block[i] ,this.A_i, N)
-      this.ids.push(block[i])
+
+    // todo verify txs
+    // get primes
+    let p_i = []
+    let p_e = []
+    let p
+    for(var i=0; i<block.length; i++){
+      console.log(block)
+      p = verifyTX(block[i], this.blocks, this.A_i, this.A_e)
+
+      let accumElems = bigInt(1)
+      for(var i=0; i<10; i++) {
+        this.A_i = _addElement(p[0][i] ,this.A_i, N)
+        this.ids.push(p[0][i]) // todo adjust ids for 1 index 256 primes
+      }
+      for(var i=0; i<10; i++) {
+        this.A_e = _addElement(p[1][i] ,this.A_e, N)
+        this.ids.push(p[1][i])
+      }
     }
+
     block.unshift(this.A_i.toString())
     this.blocks.push(block)
+
+    return p
   }
 
   getAccumulators() {
@@ -177,7 +215,7 @@ class RSAaccumulator {
   }
 
   getAccumulatorsByRange(e) {
-    return bigInt(this.blocks[e][0])
+
   }
 
   _isContained(element, cofactor, _A) {
@@ -204,6 +242,7 @@ class RSAaccumulator {
 
   // following notation from bunnz / boneh
   generateInclusionProofs(){
+    // todo: adjust to multiple ids for 1 inclusion check
     let z = [] // g^x
     let x = [] // cofactors
     let pi = [] // {z, Q, r}
@@ -268,17 +307,6 @@ class RSAaccumulator {
     let left = proof[1].Q.modPow(l, N).multiply(g.modPow(proof[1].r, N).multiply(g.modPow(a.multiply(proof[1].r), N))).mod(N)
     let right = proof[1].z.multiply(proof[1].z.modPow(a, N)).mod(N)
     return left.equals(right)
-  }
-
-  // (bytes) TX { prevBlock, from, to, amt, sig }
-  verifyTX(tx, previousTX, proofs) {
-    let vector = new Vector_H2P()
-    let previousBlock = this.blocks[tx.prevBlock]
-    // todo abi pack tx to bytes?
-    let i = _convertIndex(tx.index)
-    let previousPrimes = vector.hash(i, previousTX)
-
-    // todo check primes included and sig matches
   }
 
 }
