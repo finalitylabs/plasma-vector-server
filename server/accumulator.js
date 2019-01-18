@@ -181,6 +181,10 @@ class RSAaccumulator {
     return _generatePrimeCheckpoints()
   }
 
+  depositListener() {
+    
+  }
+
   addBlock(block) {
     console.log('adding list of txs to accumulator')
 
