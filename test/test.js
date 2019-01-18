@@ -1,18 +1,18 @@
 'use strict'
 
-const RSA = require('../server/accumulator')
+const Operator = require('../server/Operator')
 const bigInt = require("big-integer")
 
 const operator = '0x1e8524370B7cAf8dC62E3eFfBcA04cCc8e493FfE'
-let acc = new RSA()
+let acc = new Operator()
 //console.log(accumulator)
 
 console.log('-------')
 
-let tx0 = {checkpoint: 5273, index: 3, inputs:[0,0], from:operator, to:'0x95eF2833688EE675Dfc1350394619ae22b7667dF', amt:0.0001, sig:'0x1337', proof: '0x0' }
-let tx1 = {checkpoint: 1229, index: 2, inputs:[0,0], from:operator, to:'0x95eF2833688EE675Dfc1350394619ae22b7667dF', amt:0.0001, sig:'0x1337', proof: '0x0' }
-let tx2 = {checkpoint: 2, index: 1, inputs:[0,0], from:operator, to:'0x1e8524370B7cAf8dC62E3eFfBcA04cCc8e493FfE', amt:0.0001, sig:'0x1337', proof: '0x0' }
-let tx3 = {checkpoint: 6991, index: 4, inputs:[0,0], from:operator, to:'0x1e8524370B7cAf8dC62E3eFfBcA04cCc8e493FfE', amt:0.0001, sig:'0x1337', proof: '0x0' }
+let tx0 = {checkpoint_i: 700, checkpoint_p: 5273, index: 3, inputs:[0,0], from:operator, to:'0x95eF2833688EE675Dfc1350394619ae22b7667dF', amt:0.0001, sig:'0x1337', proof: '0x0' }
+let tx1 = {checkpoint_i: 500, checkpoint_p: 3581, index: 2, inputs:[0,0], from:operator, to:'0x95eF2833688EE675Dfc1350394619ae22b7667dF', amt:0.0001, sig:'0x1337', proof: '0x0' }
+let tx2 = {checkpoint_i: 700, checkpoint_p: 2, index: 1, inputs:[0,0], from:operator, to:'0x1e8524370B7cAf8dC62E3eFfBcA04cCc8e493FfE', amt:0.0001, sig:'0x1337', proof: '0x0' }
+let tx3 = {checkpoint_i: 700, checkpoint_p: 6991, index: 4, inputs:[0,0], from:operator, to:'0x1e8524370B7cAf8dC62E3eFfBcA04cCc8e493FfE', amt:0.0001, sig:'0x1337', proof: '0x0' }
 
 let b0 = [tx0]
 let b1 = [16369, 104849, 1300931, 7]

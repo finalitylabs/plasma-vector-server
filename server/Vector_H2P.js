@@ -52,7 +52,7 @@ class Vector_H2P {
 
     let bin = hex2bin(h.slice(2,66))
     // getCheckpointIndex(input.index) // hardcoded at 700 for now
-    let p_total = getNextPrimes(700, index[0], bigInt(input.checkpoint), 256)
+    let p_total = getNextPrimes(input.checkpoint_i, index[0], bigInt(input.checkpoint_p), 256)
 
     let p_i = [] // corrisponding primes for vector postions with 1 in A_i
     let p_e = [] // corrisponding primes for vector postions with 0 in A_e

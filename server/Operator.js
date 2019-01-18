@@ -141,7 +141,7 @@ function _convertIndex(i) {
 }
 
   // (bytes) TX { prevBlock, from, to, amt, sig }
-function  verifyTX(tx, blocks, A_i, A_e) {
+function verifyTX(tx, blocks, A_i, A_e) {
   let vector = new Vector_H2P()
   let previousBlock
   let previousTX
@@ -149,12 +149,13 @@ function  verifyTX(tx, blocks, A_i, A_e) {
     previousBlock = blocks[tx.inputs[0]]
     previousTX = previousBlock[tx.inputs[1]]
     let i = _convertIndex(tx.index)
-    let previousPrimes = vector.hash(i, previousTX)
+    let previousPrimes = vector.hash(i, previousTX, tx.checkpoint)
   }
   // todo abi pack tx to bytes?
   let i = _convertIndex(tx.index)
+  console.log(i)
   previousTX = {checkpoint: 1, index: 1, inputs:[0,0], from:'0x1e8524370B7cAf8dC62E3eFfBcA04cCc8e493FfE', to:'0x1e8524370B7cAf8dC62E3eFfBcA04cCc8e493FfE', amt:0.0001, sig:'0x1337'}
-  let newPrimes = vector.hash(i, previousTX)
+  let newPrimes = vector.hash(i, tx)
   return newPrimes
 
   // todo check primes included and sig matches
@@ -169,20 +170,26 @@ function _logB(val, b) {
   return Math.round(Math.log(val) / Math.log(b))
 }
 
-class RSAaccumulator {
+class Operator {
   constructor() {
     this.A_i = g
     this.A_e = g
     this.blocks = []
     this.ids = []
+    this.accounts = {} // todo database
   }
 
   initPrimes() {
     return _generatePrimeCheckpoints()
   }
 
+  getAccountBalance(address) {
+    let account = this.accounts[address]
+    return account
+  }
+
   depositListener() {
-    
+
   }
 
   addBlock(block) {
@@ -194,24 +201,31 @@ class RSAaccumulator {
     let p_e = []
     let p
     for(var i=0; i<block.length; i++){
-      console.log(block)
+      console.log('WEEEEEEEE')
+      // account database based on utxo set
+      if(this.accounts[block[i].to] === undefined) {
+        this.accounts[block[i].to]=block[i].amt
+      } else {
+        this.accounts[block[i].to]+=block[i].amt
+      }
+      this.accounts[block[i].from]=block[i].amt
+
       p = verifyTX(block[i], this.blocks, this.A_i, this.A_e)
 
       let accumElems = bigInt(1)
-      for(var i=0; i<10; i++) {
-        this.A_i = _addElement(p[0][i] ,this.A_i, N)
-        this.ids.push(p[0][i]) // todo adjust ids for 1 index 256 primes
+      for(var j=0; j<10; j++) {
+        this.A_i = _addElement(p[0][j] ,this.A_i, N)
+        this.ids.push(p[0][j]) // todo adjust ids for 1 index 256 primes
       }
-      for(var i=0; i<10; i++) {
-        this.A_e = _addElement(p[1][i] ,this.A_e, N)
-        this.ids.push(p[1][i])
+      for(var k=0; k<10; k++) {
+        this.A_e = _addElement(p[1][k] ,this.A_e, N)
+        this.ids.push(p[1][k])
       }
     }
-
     block.unshift(this.A_i.toString())
     this.blocks.push(block)
 
-    return p
+    //return p
   }
 
   getAccumulators() {
@@ -315,4 +329,4 @@ class RSAaccumulator {
 
 }
 
-module.exports = RSAaccumulator
+module.exports = Operator

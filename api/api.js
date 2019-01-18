@@ -1,30 +1,34 @@
-var appRouter = function (app) {
+var appRouter = function (app, op) {
 
   app.get("/", function(req, res) {
-    res.status(200).send("Welcome to our restful API")
+    res.status(200).send("Welcome to Plasma Vector Server")
   })
 
-  app.get("/getAccountBalance", function(req, res) {
+  app.post("/getAccountBalance", function(req, res) {
     // parse req for address
-    res.status(200).send("ids the address owns")
+    console.log(op.getAccountBalance(req.body.user))
+    let bal = op.accounts[req.body.user]
+    if(bal === undefined) bal = 0
+    res.status(200).send("Balance of "+req.body.user+": "+bal)
   })
 
-  app.get("/checkDeposit", function(req, res) {
+  app.post("/checkDeposit", function(req, res) {
     // parse req for address and amt
     res.status(200).send("deposit status")
   })
 
-  app.get("/getIDs", function(req, res) {
+  app.post("/getIDs", function(req, res) {
     // parse req for address
     res.status(200).send("IDs")
   })
 
-  app.get("/submitTransaction", function(req, res) {
+  app.post("/submitTransaction", function(req, res) {
     // parse req for tx
     res.status(200).send("tx status")
   })
 
-  app.get("/checkIDs", function(req, res) {
+  // this should be a client call to blockchain
+  app.post("/checkIDs", function(req, res) {
     // parse req for ids
     res.status(200).send("ids status")
   })
