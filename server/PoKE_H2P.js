@@ -13,16 +13,14 @@ class PoKE_H2P {
     while(true) {
       if(z.toString().length <= 3) {
         h = utils.soliditySha3(
-          { type: 'uint256', value: g },
+          { type: 'uint256', value: g.toString() },
           { type: 'uint256', value: z.toString() },
-          { type: 'uint256', value: j },
-        )
+          { type: 'uint256', value: j })
       } else {
         h = utils.soliditySha3(
-          { type: 'uint256', value: g },
+          { type: 'uint256', value: g.toString() },
           { type: 'bytes', value: utils.toHex(z.toString()) },
-          { type: 'uint256', value: j },
-        )
+          { type: 'uint256', value: j })
       }
 
       h = h.slice(2,12) // todo: this probably doesn't match solidity uint64 cast from bytes
