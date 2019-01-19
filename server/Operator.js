@@ -25,11 +25,26 @@ const N = bigInt('25195908475657893494027183240048398571429282126204032027777137
 
 const VLEN = 1000 // todo: 2^48
 
-function _idToPrime(id) {
-  let prime
-  // todo: select a proper function map the indicies of our vector to primes for the accumulator
-  return prime
-}
+
+// s = start check point index
+// lastPrime = start check point prime
+// i = index to get prime for
+// e = end index for when to stop generating primes
+// function _idToPrime(s, i, lastPrime, e) {
+//   let primes = []
+//   let t = i+e
+//   for(var j=s; j<t; j++){
+//     while(true) {
+//       lastPrime = lastPrime.plus(1)
+//       if(lastPrime.isPrime()) break
+//     }
+//     if(j==i) {
+//       primes.push(lastPrime)
+//       i++
+//     }
+//   }
+//   return primes
+// }
 
 function _generatePrimeCheckpoints() {
   let checkpoints = []
@@ -86,26 +101,54 @@ function _verifyCofactor(proof, v, A){
   // return c1.equals(c2)
 }
 
-// as per Xuanji's suggestion, let's keep x local to the operator, 
-// generate an inclusion proof for a single given element
-// uses NI-PoKE* proof of exponentiation so that recipients 
-// of the proof don't need to witness the entire [g...A]
-// currently only works for a prime included once
-function _getInclusionWitness(v, ids){
+// int v: coin id
+// [] idrange: coin id converted to range
+// [] ids: all coin id primes in [] ids_i. [] ids_e
+// [] ids_t: all primes in A_i and A_e
+function _getInclusionWitness(v, id_range, ids, ids_t, g, N){
+  let id_map_i = {}
+  let id_map_e = {}
+
+  let w_i = bigInt(1)
+  let w_e = bigInt(1)
+  for(var f=0; f<ids[0].length;f++){
+    w_i = w_i.multiply(ids[0][f])
+    id_map_i[ids[0][f].toString()] = 1
+  }
+  for(var s=0; s<ids[1].length;s++){
+    w_e = w_e.multiply(ids[1][s])
+    id_map_e[ids[1][s].toString()] = 1
+  }
+
   let z = g // g^x
   let x = bigInt(1) // cofactors
-  let pi // {z, Q, r}
+  let pi_i // {z, Q, r}
 
-  for(var j=0; j<ids.length; j++){
-    if(j!=v){
-      x = x.multiply(ids[j])
-      z = z.modPow(ids[j], N)
+  for(var j=0; j<ids_t[0].length; j++){
+    if(id_map_i[ids_t[0][j].toString()]!==1){
+      x = x.multiply(ids_t[0][j])
+      z = z.modPow(ids_t[0][j], N)
     }
   }
 
-  // TODO: get PoE pi
-  pi = [v, _getPoE(x, z, N)]
-  return pi
+  pi_i = [v, _getPoE(x, z, N)]
+
+  z = g
+  x = bigInt(1)
+  let pi_e // {z, Q, r}
+
+  for(var h=0; h<ids_t[1].length; h++){
+    if(id_map_e[ids_t[1][h].toString()]!==1){
+      x = x.multiply(ids_t[1][h])
+      z = z.modPow(ids_t[1][h], N)
+    }
+  }
+
+  pi_e = [v, _getPoE(x, z, N)]
+  // console.log(JSON.stringify(pi_e))
+  // console.log(pi_i)
+
+  return [pi_i, pi_e]
 }
 
 function _getPoE(x, z) {
@@ -140,22 +183,30 @@ function _convertIndex(i) {
   return [start, end]
 }
 
+function _getCheckpoint(index, checkpoints) {
+  for(var i=0; i<checkpoints.length; i++){
+    if(checkpoints[i].index > index) return checkpoints[i-1]
+  }
+}
+
   // (bytes) TX { prevBlock, from, to, amt, sig }
-function verifyTX(tx, blocks, A_i, A_e) {
+function verifyTX(tx, blocks, A_i, A_e, checkpoints) {
   let vector = new Vector_H2P()
   let previousBlock
   let previousTX
+  let checkpoint
   if(tx.inputs[0] !== 0) {
     previousBlock = blocks[tx.inputs[0]]
     previousTX = previousBlock[tx.inputs[1]]
     let i = _convertIndex(tx.index)
-    let previousPrimes = vector.hash(i, previousTX, tx.checkpoint)
+    checkpoint = _getCheckpoint(d[0], checkpoints)
+    let previousPrimes = vector.hash(i, previousTX, checkpoint)
   }
   // todo abi pack tx to bytes?
   let i = _convertIndex(tx.index)
-  console.log(i)
-  previousTX = {checkpoint: 1, index: 1, inputs:[0,0], from:'0x1e8524370B7cAf8dC62E3eFfBcA04cCc8e493FfE', to:'0x1e8524370B7cAf8dC62E3eFfBcA04cCc8e493FfE', amt:0.0001, sig:'0x1337'}
-  let newPrimes = vector.hash(i, tx)
+  checkpoint = _getCheckpoint(i[0], checkpoints)
+  previousTX = {index: 1, inputs:[0,0], from:'0x1e8524370B7cAf8dC62E3eFfBcA04cCc8e493FfE', to:'0x1e8524370B7cAf8dC62E3eFfBcA04cCc8e493FfE', amt:0.0001, sig:'0x1337'} // default deposit tx
+  let newPrimes = vector.hash(i, tx, checkpoint)
   return newPrimes
 
   // todo check primes included and sig matches
@@ -175,12 +226,16 @@ class Operator {
     this.A_i = g
     this.A_e = g
     this.blocks = []
-    this.ids = []
+    this.ids_i = [] // total list of all accumulated primes
+    this.ids_e = [] 
+    this.checkpoints = []
     this.accounts = {} // todo database
+    this.block_height = 0
   }
 
   initPrimes() {
-    return _generatePrimeCheckpoints()
+    this.checkpoints = _generatePrimeCheckpoints()
+    return this.checkpoints
   }
 
   getAccountBalance(address) {
@@ -200,8 +255,10 @@ class Operator {
     let p_i = []
     let p_e = []
     let p
+
+    let product = bigInt(1)
+
     for(var i=0; i<block.length; i++){
-      console.log('WEEEEEEEE')
       // account database based on utxo set
       if(this.accounts[block[i].to] === undefined) {
         this.accounts[block[i].to]=block[i].amt
@@ -210,22 +267,23 @@ class Operator {
       }
       this.accounts[block[i].from]=block[i].amt
 
-      p = verifyTX(block[i], this.blocks, this.A_i, this.A_e)
-
+      p = verifyTX(block[i], this.blocks, this.A_i, this.A_e, this.checkpoints)
+      // add new elements
       let accumElems = bigInt(1)
-      for(var j=0; j<10; j++) {
-        this.A_i = _addElement(p[0][j] ,this.A_i, N)
-        this.ids.push(p[0][j]) // todo adjust ids for 1 index 256 primes
+      for(var j=0; j<p[0].length; j++) {
+        this.A_i = _addElement(p[0][j], this.A_i, N)
+        this.ids_i.push(p[0][j]) // todo adjust ids for 1 index 256 primes
       }
-      for(var k=0; k<10; k++) {
-        this.A_e = _addElement(p[1][k] ,this.A_e, N)
-        this.ids.push(p[1][k])
+      for(var k=0; k<p[1].length; k++) {
+        this.A_e = _addElement(p[1][k], this.A_e, N)
+        this.ids_e.push(p[1][k])
       }
     }
     block.unshift(this.A_i.toString())
     this.blocks.push(block)
+    this.block_height++
 
-    //return p
+    return p
   }
 
   getAccumulators() {
@@ -254,8 +312,17 @@ class Operator {
     return xv.divide(v)
   }
 
-  getSingleInclusionProof(v) {
-    return _getInclusionWitness(bigInt(v), this.ids, g, N)
+  // int v: index of coin to get proof
+  getSingleInclusionProof(v, inputs) {
+    // generate primes from v client side as well for verification
+    let vector = new Vector_H2P()
+    let tx = this.blocks[inputs[0]][1+inputs[1]]
+    console.log('-------')
+    console.log(tx)
+    let id_range = _convertIndex(v)
+    let checkpoint = _getCheckpoint(id_range[0], this.checkpoints)
+    let ids =  vector.hash(id_range, tx, checkpoint)
+    return _getInclusionWitness(v, id_range, ids, [this.ids_i, this.ids_e], g, N)
   }
 
   // following notation from bunnz / boneh

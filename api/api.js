@@ -27,6 +27,12 @@ var appRouter = function (app, op) {
     res.status(200).send("tx status")
   })
 
+  app.post("/getInclusionProof", function(req, res) {
+    // parse req for ids
+    let proof = op.getSingleInclusionProof(req.body.value, [0,0])
+    res.status(200).send(proof)
+  })
+
   // this should be a client call to blockchain
   app.post("/checkIDs", function(req, res) {
     // parse req for ids
