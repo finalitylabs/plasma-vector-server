@@ -26,7 +26,7 @@ const N = bigInt('25195908475657893494027183240048398571429282126204032027777137
 // b^B * h^r = z
 // z = h^B*floor(x/B)+x mod B = h^x
 
-const VLEN = 1000 // todo: 2^48
+const VLEN = 2000 // todo: 2^48
 
 
 // s = start check point index
@@ -93,33 +93,44 @@ function _isContained(element, accumulator, cofactor) {
   return res.equals(accumulator.toString())
 }
 
-function _verifyCofactor(proof, v, A){
-  // let h = g.modPow(v, N)
-  // let B = bigInt(utils.hexToNumberString(utils.soliditySha3(g.toString(), A.toString(), h.toString())))
-  // let z = proof.b.modPow(B, N)
-  // let c = h.modPow(proof.r, N)
+  // verifies the cofactor proof for a given range
+function _verifyPoKE(proof, v) {
+  let Q = bigInt(proof[1].Q)
+  let r = bigInt(proof[1].r)
+  let z = bigInt(proof[1].z)
+  let poke = new PoKE_H2P()
+  let l = poke.hash(g, z) // H_prime(u,w,z) TODO, get w/z from v, not the incoming proof
+  let alpha = utils.soliditySha3 // sha(u, w, z, l)
+  (
+    { type: 'uint256', value: g.toString() },
+    { type: 'bytes', value: utils.toHex(z.toString()) },
+    { type: 'uint256', value: l.toString() }
+  )
 
-  // let c1 = z.multiply(c).mod(N)
-  // let c2 = A.mod(N)
-  // return c1.equals(c2)
+  let a = bigInt(utils.hexToNumberString(alpha))
+  // check: Q^l*u^r*g^alpha*r = w*z^alpha
+  let left = Q.modPow(l, N).multiply(g.modPow(r, N).multiply(g.modPow(a.multiply(r), N))).mod(N)
+  let right = z.multiply(z.modPow(a, N)).mod(N)
+  return left.equals(right)
 }
+
 
 // int v: coin id
 // [] idrange: coin id converted to vector range
 // [] ids: all coin id (v) primes in [] ids_i. [] ids_e
 // [] ids_t: all primes in A_i and A_e
-async function _getInclusionWitness(v, id_range, ids, ids_t, g, N){
+function _getInclusionWitness(v, id_range, ids, ids_t){
   let id_map_i = {}
   let id_map_e = {}
 
-  let w_i = bigInt(1)
-  let w_e = bigInt(1)
+  //let w_i = bigInt(1)
+  //let w_e = bigInt(1)
   for(var f=0; f<ids[0].length;f++){
-    w_i = w_i.multiply(ids[0][f])
+    //w_i = w_i.multiply(ids[0][f])
     id_map_i[ids[0][f].toString()] = 1
   }
   for(var s=0; s<ids[1].length;s++){
-    w_e = w_e.multiply(ids[1][s])
+    //w_e = w_e.multiply(ids[1][s])
     id_map_e[ids[1][s].toString()] = 1
   }
 
@@ -200,20 +211,38 @@ function verifyTX(tx, blocks, A_i, A_e, checkpoints) {
   let previousBlock
   let previousTX
   let checkpoint
-  if(tx.inputs[0] !== 0) {
+  if(tx.inputs[0] !== null) {
     previousBlock = blocks[tx.inputs[0]]
-    previousTX = previousBlock[tx.inputs[1]]
-    let i = _convertIndex(tx.index)
-    checkpoint = _getCheckpoint(d[0], checkpoints)
+    previousTX = previousBlock[tx.inputs[1]+1]
+    let i = _convertIndex(previousTX.index)
+    checkpoint = _getCheckpoint(i[0], checkpoints)
     let previousPrimes = vector.hash(i, previousTX, checkpoint)
+    // check previous primes are in A
+    let prev_pi = previousTX.proof
+    // TODO get previous primes for value of tx.index
+    if(_verifyPoKE(prev_pi[0], tx.index)!== true) {
+      return false
+    }
+    if(_verifyPoKE(prev_pi[1], tx.index)!== true) {
+      return false
+    } 
+    console.log(true)
+    // set A's to proof value (the exlusion of the proven tx)
+    A_i = prev_pi[0].z
+    A_e = prev_pi[1].z
+    // get new primes
+    i = _convertIndex(tx.index)
+    checkpoint = _getCheckpoint(i[0], checkpoints)
+    let newPrimes = vector.hash(i, tx, checkpoint)
+    return [newPrimes, A_i, A_e]
+  } else {
+    // todo abi pack tx to bytes?
+    let i = _convertIndex(tx.index)
+    checkpoint = _getCheckpoint(i[0], checkpoints)
+    previousTX = {index: 1, inputs:[0,0], from:'0x1e8524370B7cAf8dC62E3eFfBcA04cCc8e493FfE', to:'0x1e8524370B7cAf8dC62E3eFfBcA04cCc8e493FfE', amt:0.0001, sig:'0x1337'} // default deposit tx
+    let newPrimes = vector.hash(i, tx, checkpoint)
+    return [newPrimes, A_i, A_e]
   }
-  // todo abi pack tx to bytes?
-  let i = _convertIndex(tx.index)
-  checkpoint = _getCheckpoint(i[0], checkpoints)
-  previousTX = {index: 1, inputs:[0,0], from:'0x1e8524370B7cAf8dC62E3eFfBcA04cCc8e493FfE', to:'0x1e8524370B7cAf8dC62E3eFfBcA04cCc8e493FfE', amt:0.0001, sig:'0x1337'} // default deposit tx
-  let newPrimes = vector.hash(i, tx, checkpoint)
-  return newPrimes
-
   // todo check primes included and sig matches
   // todo delete verified tx previousPrimes from A
   // return [A`,newPrimes]
@@ -278,19 +307,21 @@ class Operator {
       p = verifyTX(block[i], this.blocks, this.A_i, this.A_e, this.checkpoints)
       // add new elements
       let accumElems = bigInt(1)
-      for(var j=0; j<p[0].length; j++) {
-        this.A_i = _addElement(p[0][j], this.A_i, N)
-        this.ids_i.push(p[0][j]) // todo adjust ids for 1 index 256 primes
+      for(var j=0; j<p[0][0].length; j++) {
+        this.A_i = _addElement(p[0][0][j], this.A_i, N)
+        this.ids_i.push(p[0][0][j]) // todo adjust ids for 1 index 256 primes
       }
-      for(var k=0; k<p[1].length; k++) {
-        this.A_e = _addElement(p[1][k], this.A_e, N)
-        this.ids_e.push(p[1][k])
+      for(var k=0; k<p[0][1].length; k++) {
+        this.A_e = _addElement(p[0][1][k], this.A_e, N)
+        this.ids_e.push(p[0][1][k])
       }
     }
     block.unshift(this.A_i.toString())
     this.blocks.push(block)
     this.block_height++
 
+    this.A_i = p[1]
+    this.A_e = p[2]
     return p
   }
 
@@ -330,9 +361,11 @@ class Operator {
     let id_range = _convertIndex(v)
     let checkpoint = _getCheckpoint(id_range[0], this.checkpoints)
     let ids =  vector.hash(id_range, tx, checkpoint)
+
     let bal = await this.web3.eth.getBalance('0x38a583c19540f9f34D94166da2D4401352f4b0F7')
     console.log(bal)
-    let proof = await _getInclusionWitness(v, id_range, ids, [this.ids_i, this.ids_e], g, N)
+
+    let proof = _getInclusionWitness(v, id_range, ids, [this.ids_i, this.ids_e])
     console.log('proof: ' + proof)
     return proof
   }
@@ -387,24 +420,6 @@ class Operator {
   //   }
   //   return x
   // }
-
-  // verifies the cofactor proof for a given range
-  verifyPoKE(proof, v){
-    let poke = new PoKE_H2P()
-    let l = poke.hash(g, proof[1].z) // H_prime(u,w,z)
-    let alpha = utils.soliditySha3 // sha(u, w, z, l)
-    (
-      { type: 'uint256', value: g.toString() },
-      { type: 'bytes', value: utils.toHex(proof[1].z.toString()) },
-      { type: 'uint256', value: l.toString() }
-    )
-
-    let a = bigInt(utils.hexToNumberString(alpha))
-    // check: Q^l*u^r*g^alpha*r = w*z^alpha
-    let left = proof[1].Q.modPow(l, N).multiply(g.modPow(proof[1].r, N).multiply(g.modPow(a.multiply(proof[1].r), N))).mod(N)
-    let right = proof[1].z.multiply(proof[1].z.modPow(a, N)).mod(N)
-    return left.equals(right)
-  }
 
   checkDeposit(address) {
     for(var i=0; i<this.deposits.length; i++) {
