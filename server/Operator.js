@@ -1,9 +1,12 @@
 'use strict'
 
+const async = require('asyncawait/async')
 const bigInt = require("big-integer")
 const utils = require('web3-utils')
 const PoKE_H2P = require('./PoKE_H2P')
 const Vector_H2P = require('./Vector_H2P')
+const Web3 = require('web3')
+const abi = require('./abi')
 
 const g = bigInt(3)
 const N = bigInt('25195908475657893494027183240048398571429282126204032027777137836043662020707595556264018525880784406918290641249515082189298559149176184502808489120072844992687392807287776735971418347270261896375014971824691165077613379859095700097330459748808428401797429100642458691817195118746121515172654632282216869987549182422433637259085141865462043576798423387184774447920739934236584823824281198163815010674810451660377306056201619676256133844143603833904414952634432190114657544454178424020924616515723350778707749817125772467962926386356373289912154831438167899885040445364023527381951378636564391212010397122822120720357')
@@ -102,10 +105,10 @@ function _verifyCofactor(proof, v, A){
 }
 
 // int v: coin id
-// [] idrange: coin id converted to range
-// [] ids: all coin id primes in [] ids_i. [] ids_e
+// [] idrange: coin id converted to vector range
+// [] ids: all coin id (v) primes in [] ids_i. [] ids_e
 // [] ids_t: all primes in A_i and A_e
-function _getInclusionWitness(v, id_range, ids, ids_t, g, N){
+async function _getInclusionWitness(v, id_range, ids, ids_t, g, N){
   let id_map_i = {}
   let id_map_e = {}
 
@@ -151,6 +154,8 @@ function _getInclusionWitness(v, id_range, ids, ids_t, g, N){
   return [pi_i, pi_e]
 }
 
+
+// x can get large
 function _getPoE(x, z) {
   let poke = new PoKE_H2P()
   let l = poke.hash(g, z)
@@ -223,6 +228,8 @@ function _logB(val, b) {
 
 class Operator {
   constructor() {
+    this.web3 = new Web3(new Web3.providers.HttpProvider('https://rinkeby.infura.io/v3/8987bc25c1b34ad7b0a6d370fc287ef9'))
+    // mock memory database
     this.A_i = g
     this.A_e = g
     this.blocks = []
@@ -231,6 +238,7 @@ class Operator {
     this.checkpoints = []
     this.accounts = {} // todo database
     this.block_height = 0
+    this.deposits = {} // 
   }
 
   initPrimes() {
@@ -313,7 +321,7 @@ class Operator {
   }
 
   // int v: index of coin to get proof
-  getSingleInclusionProof(v, inputs) {
+  async getSingleInclusionProof(v, inputs) {
     // generate primes from v client side as well for verification
     let vector = new Vector_H2P()
     let tx = this.blocks[inputs[0]][1+inputs[1]]
@@ -322,7 +330,11 @@ class Operator {
     let id_range = _convertIndex(v)
     let checkpoint = _getCheckpoint(id_range[0], this.checkpoints)
     let ids =  vector.hash(id_range, tx, checkpoint)
-    return _getInclusionWitness(v, id_range, ids, [this.ids_i, this.ids_e], g, N)
+    let bal = await this.web3.eth.getBalance('0x38a583c19540f9f34D94166da2D4401352f4b0F7')
+    console.log(bal)
+    let proof = await _getInclusionWitness(v, id_range, ids, [this.ids_i, this.ids_e], g, N)
+    console.log('proof: ' + proof)
+    return proof
   }
 
   // following notation from bunnz / boneh
@@ -394,6 +406,13 @@ class Operator {
     return left.equals(right)
   }
 
+  checkDeposit(address) {
+    for(var i=0; i<this.deposits.length; i++) {
+      if(this.deposits[address].depositer === address) {
+        return this.deposits[address].status
+      }
+    }
+  }
 }
 
 module.exports = Operator

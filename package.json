@@ -1,0 +1,33 @@
+{
+  "name": "plasma-vector-server",
+  "version": "1.0.0",
+  "description": "operator codebase",
+  "main": "index.js",
+  "directories": {
+    "test": "test"
+  },
+  "dependencies": {
+    "asyncawait": "^1.0.7",
+    "big-integer": "^1.6.40",
+    "bignumber.js": "^8.0.2",
+    "body-parser": "^1.18.3",
+    "cors": "^2.8.5",
+    "express": "^4.16.4",
+    "web3": "^1.0.0-beta.37",
+    "web3-utils": "^1.0.0-beta.37"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/finalitylabs/plasma-vector-server.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/finalitylabs/plasma-vector-server/issues"
+  },
+  "homepage": "https://github.com/finalitylabs/plasma-vector-server#readme"
+}
