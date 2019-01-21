@@ -6,6 +6,8 @@ const utils = require('web3-utils')
 const PoKE_H2P = require('./PoKE_H2P')
 const Vector_H2P = require('./Vector_H2P')
 const Web3 = require('web3')
+const MongoClient = require('mongodb').MongoClient
+const dburl = 'mongodb://localhost/Operator_test'
 const abi = require('./abi.js')
 const operatorAddress = '0x8b9ffe438a877797385f1994270ec0d4e8cabc55'
 
@@ -29,7 +31,7 @@ const prf = [[3,{"z":"2116861560954896327412077378112594668201292474394964338298
 // b^B * h^r = z
 // z = h^B*floor(x/B)+x mod B = h^x
 
-const VLEN = 10000 // todo: 2^48
+const VLEN = 100000 // todo: 2^48
 
 
 // s = start check point index
@@ -72,7 +74,8 @@ function _generatePrimeCheckpoints() {
 }
 
 function _addElement(element, accumulator) {
-  console.log('adding element: '+element+' to accumulator: '+accumulator.toString())
+  //console.log('adding element: '+element+' to accumulator: '+accumulator.toString())
+  console.log('adding element: '+element)
   return accumulator.modPow(element.toString(), N.toString())
 }
 
@@ -270,7 +273,7 @@ function _handleDeposit(deposit){
   // for now just submit a new block for every deposit
   let tx = {
     index: offset,
-    inputs: [0,0],
+    inputs: [null,0],
     from: '0x1e8524370B7cAf8dC62E3eFfBcA04cCc8e493FfE',
     to: depositer,
     amt: amt,
@@ -279,6 +282,12 @@ function _handleDeposit(deposit){
   }
   console.log(tx)
   return tx
+}
+
+async function connectDB() {
+  let client = await MongoClient.connect(dburl)
+  let db = client.db('Operator_test')
+  return db
 }
 
 class Operator {
@@ -297,14 +306,23 @@ class Operator {
     this.block_height = 0
     this.deposits = {} //
 
-    this.depositEvent.once('data',(event)=>{
+    this.depositEvent.on('data',(event)=>{
       let b = [_handleDeposit(event)]
       this.addBlock(b)
     })
   }
 
-  initPrimes() {
+  async init() {
+    this.db = await connectDB()
     this.checkpoints = _generatePrimeCheckpoints()
+    let database = this.db.collection('Checkpoints')
+    for(var i=0; i<this.checkpoints.length; i++) {
+      let d = await database.find({index:this.checkpoints[i].index})
+      let _d = await d.toArray()
+      if(_d[0] === undefined) {
+        await database.insertOne(this.checkpoints[i])
+      }
+    }
     return this.checkpoints
   }
 
@@ -327,11 +345,11 @@ class Operator {
     for(var i=0; i<block.length; i++){
       // account database generated from utxo set
       if(this.accounts[block[i].to] === undefined) {
-        this.accounts[block[i].to]=block[i].amt
+        this.accounts[block[i].to]=parseInt(block[i].amt)
       } else {
-        this.accounts[block[i].to]+=block[i].amt
+        this.accounts[block[i].to]+=parseInt(block[i].amt)
       }
-      this.accounts[block[i].from]-=block[i].amt
+      this.accounts[block[i].from]-=parseInt(block[i].amt)
 
       p = verifyTX(block[i], this.blocks, this.A_i, this.A_e, this.checkpoints)
       // add new elements
@@ -349,8 +367,10 @@ class Operator {
     this.blocks.push(block)
     this.block_height++
 
+    console.log(JSON.stringify(this.A_i))
     this.A_i = p[1]
     this.A_e = p[2]
+    console.log(JSON.stringify(this.A_i))
     return p
   }
 

@@ -46,32 +46,36 @@ let proof_init2 = [[2,{"z":"1031967240536496565316138923474380341116880055666436
 // // todo: create function to get v
 // console.log(v.toString())
 
+
 async function main() {
   let acc = new Operator()
 
-  acc.initPrimes().forEach((e)=>{
-    console.log(e)
+  let initPrimes = await acc.init()
+  initPrimes.forEach((e)=>{
+    //console.log(e)
   })
 
-  let tx0 = {index: 3, inputs:[null,0], from:operator, to:'0x95eF2833688EE675Dfc1350394619ae22b7667dF', amt:0.0001, sig:'0x1337', proof: proof_init1 }
-  let tx1 = {index: 2, inputs:[null,0], from:operator, to:'0x95eF2833688EE675Dfc1350394619ae22b7667dF', amt:0.0001, sig:'0x1337', proof: proof_init2 }
+  //console.log(await acc.db)
 
-  let b0 = [tx0, tx1]
+  // let tx0 = {index: 3, inputs:[null,0], from:operator, to:'0x95eF2833688EE675Dfc1350394619ae22b7667dF', amt:0.0001, sig:'0x1337', proof: proof_init1 }
+  // let tx1 = {index: 2, inputs:[null,0], from:operator, to:'0x95eF2833688EE675Dfc1350394619ae22b7667dF', amt:0.0001, sig:'0x1337', proof: proof_init2 }
 
-  let b2 = [7, 5, 16369, 104849, 1300931, '32416187899', '32416188517', '32416188647', '32416189391', '32416189459', '32416189469']
-  let b3 = ['2997635304785533129', '2129620256793959569', '2432064126451395277', '514175537678074399', '514175537678074399', '514175537678074399', '514175537678074399']
+  // let b0 = [tx0, tx1]
 
-  let primes =  acc.addBlock(b0)
-  let ins = [0,0]
-  let proof1 = acc.getSingleInclusionProof(3, ins)
-  let proof2 = acc.getSingleInclusionProof(2, ins)
-  //console.log(JSON.stringify(proof1))
+  // let b2 = [7, 5, 16369, 104849, 1300931, '32416187899', '32416188517', '32416188647', '32416189391', '32416189459', '32416189469']
+  // let b3 = ['2997635304785533129', '2129620256793959569', '2432064126451395277', '514175537678074399', '514175537678074399', '514175537678074399', '514175537678074399']
 
-  let tx2 = {index: 1, inputs:[0,0], from:'0x95eF2833688EE675Dfc1350394619ae22b7667dF', to:'0x1e8524370B7cAf8dC62E3eFfBcA04cCc8e493FfE', amt:0.0001, sig:'0x1337', proof: proof1 }
-  let tx3 = {index: 4, inputs:[0,1], from:'0x95eF2833688EE675Dfc1350394619ae22b7667dF', to:'0x1e8524370B7cAf8dC62E3eFfBcA04cCc8e493FfE', amt:0.0001, sig:'0x1337', proof: proof2 }
+  // let primes =  acc.addBlock(b0)
+  // let ins = [0,0]
+  // let proof1 = acc.getSingleInclusionProof(3, ins)
+  // let proof2 = acc.getSingleInclusionProof(2, ins)
+  // //console.log(JSON.stringify(proof1))
 
-  let b1 = [tx2, tx3]
-  acc.addBlock(b1)
+  // let tx2 = {index: 1, inputs:[0,0], from:'0x95eF2833688EE675Dfc1350394619ae22b7667dF', to:'0x1e8524370B7cAf8dC62E3eFfBcA04cCc8e493FfE', amt:0.0001, sig:'0x1337', proof: proof1 }
+  // let tx3 = {index: 4, inputs:[0,1], from:'0x95eF2833688EE675Dfc1350394619ae22b7667dF', to:'0x1e8524370B7cAf8dC62E3eFfBcA04cCc8e493FfE', amt:0.0001, sig:'0x1337', proof: proof2 }
+
+  // let b1 = [tx2, tx3]
+  // acc.addBlock(b1)
 }
 
 main()
