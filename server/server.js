@@ -20,8 +20,6 @@ let tx4 = {index: 5, inputs:[null,0], from:operator, to:'0x3c8d121fE359730EA4D6B
 let b0 = [tx0, tx1, tx4]
 let primes = op.addBlock(b0)
 
-op.depositListener()
-
 var whitelist = [
   'http://localhost:8080',
   'http://localhost:3000'
