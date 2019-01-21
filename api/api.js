@@ -1,3 +1,4 @@
+const async = require('asyncawait/async')
 var appRouter = function (app, op) {
 
   app.get("/", function(req, res) {
@@ -6,10 +7,10 @@ var appRouter = function (app, op) {
 
   app.post("/getAccountBalance", function(req, res) {
     // parse req for address
-    console.log(op.getAccountBalance(req.body.user))
+    //console.log(op.getAccountBalance(req.body.user))
     let bal = op.accounts[req.body.user]
     if(bal === undefined) bal = 0
-    res.status(200).send("Balance of "+req.body.user+": "+bal)
+    res.status(200).send(bal.toString())
   })
 
   app.post("/checkDeposit", function(req, res) {

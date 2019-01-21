@@ -63,8 +63,8 @@ async function main() {
 
   let primes =  acc.addBlock(b0)
   let ins = [0,0]
-  let proof1 = await acc.getSingleInclusionProof(3, ins)
-  let proof2 = await acc.getSingleInclusionProof(2, ins)
+  let proof1 = acc.getSingleInclusionProof(3, ins)
+  let proof2 = acc.getSingleInclusionProof(2, ins)
   //console.log(JSON.stringify(proof1))
 
   let tx2 = {index: 1, inputs:[0,0], from:'0x95eF2833688EE675Dfc1350394619ae22b7667dF', to:'0x1e8524370B7cAf8dC62E3eFfBcA04cCc8e493FfE', amt:0.0001, sig:'0x1337', proof: proof1 }

@@ -26,7 +26,7 @@ const N = bigInt('25195908475657893494027183240048398571429282126204032027777137
 // b^B * h^r = z
 // z = h^B*floor(x/B)+x mod B = h^x
 
-const VLEN = 2000 // todo: 2^48
+const VLEN = 10000 // todo: 2^48
 
 
 // s = start check point index
@@ -296,13 +296,13 @@ class Operator {
     let product = bigInt(1)
 
     for(var i=0; i<block.length; i++){
-      // account database based on utxo set
+      // account database generated from utxo set
       if(this.accounts[block[i].to] === undefined) {
         this.accounts[block[i].to]=block[i].amt
       } else {
         this.accounts[block[i].to]+=block[i].amt
       }
-      this.accounts[block[i].from]=block[i].amt
+      this.accounts[block[i].from]-=block[i].amt
 
       p = verifyTX(block[i], this.blocks, this.A_i, this.A_e, this.checkpoints)
       // add new elements
@@ -352,7 +352,7 @@ class Operator {
   }
 
   // int v: index of coin to get proof
-  async getSingleInclusionProof(v, inputs) {
+  getSingleInclusionProof(v, inputs) {
     // generate primes from v client side as well for verification
     let vector = new Vector_H2P()
     let tx = this.blocks[inputs[0]][1+inputs[1]]
@@ -362,8 +362,8 @@ class Operator {
     let checkpoint = _getCheckpoint(id_range[0], this.checkpoints)
     let ids =  vector.hash(id_range, tx, checkpoint)
 
-    let bal = await this.web3.eth.getBalance('0x38a583c19540f9f34D94166da2D4401352f4b0F7')
-    console.log(bal)
+    // let bal = await this.web3.eth.getBalance('0x38a583c19540f9f34D94166da2D4401352f4b0F7')
+    // console.log(bal)
 
     let proof = _getInclusionWitness(v, id_range, ids, [this.ids_i, this.ids_e])
     console.log('proof: ' + proof)
