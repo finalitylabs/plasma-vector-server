@@ -15,9 +15,12 @@ let proof_init2 = [[2,{"z":"1031967240536496565316138923474380341116880055666436
 
 let tx0 = {index: 3, inputs:[null,0], from:operator, to:'0x95eF2833688EE675Dfc1350394619ae22b7667dF', amt:0.0001, sig:'0x1337', proof: proof_init1 }
 let tx1 = {index: 2, inputs:[null,0], from:operator, to:'0x95eF2833688EE675Dfc1350394619ae22b7667dF', amt:0.0001, sig:'0x1337', proof: proof_init2 }
+let tx4 = {index: 5, inputs:[null,0], from:operator, to:'0x3c8d121fE359730EA4D6BA119fb48252DF8c23f7', amt:0.0001, sig:'0x1337', proof: proof_init2 }
 
-let b0 = [tx0, tx1]
+let b0 = [tx0, tx1, tx4]
 let primes = op.addBlock(b0)
+
+op.depositListener()
 
 var whitelist = [
   'http://localhost:8080',

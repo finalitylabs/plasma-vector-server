@@ -6,10 +6,12 @@ const utils = require('web3-utils')
 const PoKE_H2P = require('./PoKE_H2P')
 const Vector_H2P = require('./Vector_H2P')
 const Web3 = require('web3')
-const abi = require('./abi')
+const abi = require('./abi.js')
+const operatorAddress = '0x8b9ffe438a877797385f1994270ec0d4e8cabc55'
 
 const g = bigInt(3)
 const N = bigInt('25195908475657893494027183240048398571429282126204032027777137836043662020707595556264018525880784406918290641249515082189298559149176184502808489120072844992687392807287776735971418347270261896375014971824691165077613379859095700097330459748808428401797429100642458691817195118746121515172654632282216869987549182422433637259085141865462043576798423387184774447920739934236584823824281198163815010674810451660377306056201619676256133844143603833904414952634432190114657544454178424020924616515723350778707749817125772467962926386356373289912154831438167899885040445364023527381951378636564391212010397122822120720357')
+// hex_N C7970CEEDCC3B0754490201A7AA613CD73911081C790F5F1A8726F463550BB5B7FF0DB8E1EA1189EC72F93D1650011BD721AEEACC2ACDE32A04107F0648C2813A31F5B0B7765FF8B44B4B6FFC93384B646EB09C7CF5E8592D40EA33C80039F35B4F14A04B51F7BFD781BE4D1673164BA8EB991C2C4D730BBBE35F592BDEF524AF7E8DAEFD26C66FC02C479AF89D64D373F442709439DE66CEB955F3EA37D5159F6135809F85334B5CB1813ADDC80CD05609F10AC6A95AD65872C909525BDAD32BC729592642920F24C61DC5B3C3B7923E56B16A4D9D373D8721F24A3FC0F1B3131F55615172866BCCC30F95054C824E733A5EB6817F7BC16399D48C6361CC7E5
 
 // TODO NI-PoKE* proof of exponent knowledge scheme
 
@@ -255,9 +257,19 @@ function _logB(val, b) {
   return Math.round(Math.log(val) / Math.log(b))
 }
 
+function _registerEvents(contract) {
+  return contract.events.Deposit({fromBlock:0})
+}
+
+function _listent() {
+
+}
+
 class Operator {
   constructor() {
     this.web3 = new Web3(new Web3.providers.HttpProvider('https://rinkeby.infura.io/v3/8987bc25c1b34ad7b0a6d370fc287ef9'))
+    this.operator = new this.web3.eth.Contract(abi, operatorAddress)
+    this.depositEvent = _registerEvents(this.operator)
     // mock memory database
     this.A_i = g
     this.A_e = g
@@ -267,7 +279,7 @@ class Operator {
     this.checkpoints = []
     this.accounts = {} // todo database
     this.block_height = 0
-    this.deposits = {} // 
+    this.deposits = {} //
   }
 
   initPrimes() {
@@ -280,8 +292,13 @@ class Operator {
     return account
   }
 
-  depositListener() {
-
+  async depositListener() {
+    //let e = await this.operator.getPastEvents('Deposit')
+    let d = await this.operator._amt()
+    let b = await this.web3.eth.getBlock('latest')
+    //console.log(this.operator.events)
+    console.log(d)
+    //return e
   }
 
   addBlock(block) {
