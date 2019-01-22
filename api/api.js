@@ -11,8 +11,9 @@ var appRouter = function (app, op) {
     res.status(200).send(bal[0].balance)
   })
 
-  app.post("/checkDeposit", function(req, res) {
+  app.post("/checkDeposit", async function(req, res) {
     // parse req for address and amt
+    let deposit = await op.checkDeposit(req.body.address)
     res.status(200).send("deposit status")
   })
 

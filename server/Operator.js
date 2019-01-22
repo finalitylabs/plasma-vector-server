@@ -232,9 +232,11 @@ function verifyTX(tx, previousBlock, A_i, A_e, checkpoints) {
     } 
     console.log(true)
     // set A's to proof value (the exlusion of the proven tx)
+    // this only works for 1 tx per block
     A_i = prev_pi[0].z
     A_e = prev_pi[1].z
     // get new primes
+    // this only works for one coin per block
     i = _convertIndex(tx.index)
     tx.amt = tx.amt*10000
     checkpoint = _getCheckpoint(i[0], checkpoints)
@@ -346,9 +348,9 @@ class Operator {
     let checkdb = this.db.collection('Checkpoints')
 
     let prevBlock = await blocksdb.find({BlockNumber:parseInt(block.BlockNumber)-1})
-    let a_i = await prevBlock.toArray()
-    let a_e = bigInt(a_i[0].A_e)
-    a_i = bigInt(a_i[0].A_i)
+    prevBlock = await prevBlock.toArray()
+    let a_i = bigInt(prevBlock[0].A_i)
+    let a_e = bigInt(prevBlock[0].A_e)
     // todo verify txs
     // get primes
     let p_i = []
@@ -358,14 +360,11 @@ class Operator {
     let product = bigInt(1)
 
     for(var i=0; i<block.txs.length; i++){
-      let prevBlock = blocksdb.find({BlockNumber:parseInt(block.BlockNumber)-1})
-      prevBlock = await prevBlock.toArray()
       let newBal
       let t = await accountdb.find({address: block.txs[i].to})
       t = await t.toArray()
       let f = await accountdb.find({address: block.txs[i].from})
       f = await f.toArray()
-      console.log(t)
       // account database generated from utxo set
       if(block.txs[i].inputs[0] === null) {
         if(t[0] === undefined) {
@@ -373,9 +372,10 @@ class Operator {
         } else {
           newBal = parseFloat(t[0].balance) + parseFloat(block.txs[i].amt)
           newBal = newBal.toFixed(4)
-          console.log(newBal)
           await accountdb.updateOne({address: block.txs[i].to},{$set:{balance:newBal}})
         }
+        //store deposit
+        await depositsdb.insertOne({address: block.txs[i].to, finalized: true})
       } else {
         newBal = parseFloat(t[0].balance) + parseFloat(block.txs[i].amt)
         newBal = newBal.toFixed(4)
@@ -400,6 +400,7 @@ class Operator {
     block.A_i = a_i.toString()
     block.A_e = a_e.toString()
     // store block in db
+    await blocksdb.insertOne(block)
     this.blocks.push(block)
     this.block_height++
 
@@ -505,11 +506,14 @@ class Operator {
   //   return x
   // }
 
-  checkDeposit(address) {
-    for(var i=0; i<this.deposits.length; i++) {
-      if(this.deposits[address].depositer === address) {
-        return this.deposits[address].status
-      }
+  async checkDeposit(address) {
+    let depositsdb = this.db.collection('Deposits')
+    let deposit = await depositsdb.find({Address:address})
+    deposit = await deposit.toArray()
+    if(deposit[deposit.length].finalized === true) {
+      return true
+    } else {
+      return false
     }
   }
 }
