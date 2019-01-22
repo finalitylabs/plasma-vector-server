@@ -5,12 +5,10 @@ var appRouter = function (app, op) {
     res.status(200).send("Welcome to Plasma Vector Server")
   })
 
-  app.post("/getAccountBalance", function(req, res) {
-    // parse req for address
-    //console.log(op.getAccountBalance(req.body.user))
-    let bal = op.accounts[req.body.user]
-    if(bal === undefined) bal = 0
-    res.status(200).send(bal.toString())
+  app.post("/getAccountBalance", async function(req, res) {
+    let bal = await op.getAccountBalance(req.body.user)
+    if(bal.length === 0) bal = 0
+    res.status(200).send(bal[0].balance)
   })
 
   app.post("/checkDeposit", function(req, res) {
