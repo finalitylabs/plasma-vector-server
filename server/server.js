@@ -23,7 +23,8 @@ async function main() {
   let tx4 = {index: 5, inputs:[null,0], from:operator, to:'0x3c8d121fE359730EA4D6BA119fb48252DF8c23f7', amt:0.0001, sig:'0x1337', proof: proof_init2 }
 
   let b0 = {BlockNumber:1, A_i:A_i_init, A_e:A_e_init, txs:[tx0, tx1]}
-  let primes = await op.addBlock(b0)
+  //let primes = await op.addBlock(b0)
+  let prf = await op.getSingleInclusionProof(3,tx0)
 
   var whitelist = [
     'http://localhost:8080',

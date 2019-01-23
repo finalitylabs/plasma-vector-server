@@ -31,7 +31,7 @@ const prf = [[3,{"z":"2116861560954896327412077378112594668201292474394964338298
 // b^B * h^r = z
 // z = h^B*floor(x/B)+x mod B = h^x
 
-const VLEN = 100000 // todo: 2^48
+const VLEN = 200000 // todo: 2^48
 
 
 // s = start check point index
@@ -55,6 +55,8 @@ const VLEN = 100000 // todo: 2^48
 // }
 
 function _generatePrimeCheckpoints() {
+  // todo, get VLEN from input, get db.Checkpoints.count()
+  // if(count*100 < VLEN)... start from vlen-count
   let checkpoints = []
   let primes = []
   let lastPrime = bigInt(3)
@@ -125,12 +127,12 @@ function _verifyPoKE(proof, v) {
 // [] idrange: coin id converted to vector range
 // [] ids: all coin id (v) primes in [] ids_i. [] ids_e
 // [] ids_t: all primes in A_i and A_e
-function _getInclusionWitness(v, id_range, ids, ids_t){
+async function _getInclusionWitness(v, id_range, ids, primes_i, primes_e){
   let id_map_i = {}
   let id_map_e = {}
-
   //let w_i = bigInt(1)
   //let w_e = bigInt(1)
+
   for(var f=0; f<ids[0].length;f++){
     //w_i = w_i.multiply(ids[0][f])
     id_map_i[ids[0][f].toString()] = 1
@@ -144,30 +146,29 @@ function _getInclusionWitness(v, id_range, ids, ids_t){
   let x = bigInt(1) // cofactors
   let pi_i // {z, Q, r}
 
-  for(var j=0; j<ids_t[0].length; j++){
-    if(id_map_i[ids_t[0][j].toString()]!==1){
-      x = x.multiply(ids_t[0][j])
-      z = z.modPow(ids_t[0][j], N)
+  await primes_i.find().forEach((_p)=>{
+    if(id_map_i[_p.Prime]!==1){
+      x = x.multiply(_p.Prime)
+      z = z.modPow(_p.Prime, N)
     }
-  }
-
+  })
+  console.log(x.toString())
   pi_i = [v, _getPoE(x, z, N)]
 
   z = g
   x = bigInt(1)
   let pi_e // {z, Q, r}
 
-  for(var h=0; h<ids_t[1].length; h++){
-    if(id_map_e[ids_t[1][h].toString()]!==1){
-      x = x.multiply(ids_t[1][h])
-      z = z.modPow(ids_t[1][h], N)
+  await primes_e.find().forEach((_p)=>{
+    if(id_map_e[_p.Prime]!==1){
+      x = x.multiply(_p.Prime)
+      z = z.modPow(_p.Prime, N)
     }
-  }
-
+  })
+  console.log(x.toString())
   pi_e = [v, _getPoE(x, z, N)]
   // console.log(JSON.stringify(pi_e))
   // console.log(pi_i)
-
   return [pi_i, pi_e]
 }
 
@@ -212,10 +213,12 @@ function _getCheckpoint(index, checkpoints) {
 }
 
   // (bytes) TX { prevBlock, from, to, amt, sig }
-function verifyTX(tx, previousBlock, A_i, A_e, checkpoints) {
+function verifyTX(tx, previousBlock, checkpoints) {
   let vector = new Vector_H2P()
   let previousTX
   let checkpoint
+  let A_i
+  let A_e
   if(tx.inputs[0] !== null) {
     previousTX = previousBlock.txs[tx.inputs[1]]
     let i = _convertIndex(previousTX.index)
@@ -241,7 +244,7 @@ function verifyTX(tx, previousBlock, A_i, A_e, checkpoints) {
     tx.amt = tx.amt*10000
     checkpoint = _getCheckpoint(i[0], checkpoints)
     let newPrimes = vector.hash(i, tx, checkpoint)
-    return [newPrimes, A_i, A_e]
+    return [newPrimes, previousTX]
   } else {
     // todo abi pack tx to bytes?
     let i = _convertIndex(tx.index)
@@ -249,7 +252,7 @@ function verifyTX(tx, previousBlock, A_i, A_e, checkpoints) {
     checkpoint = _getCheckpoint(i[0], checkpoints)
     previousTX = {index: 1, inputs:[0,0], from:'0x1e8524370B7cAf8dC62E3eFfBcA04cCc8e493FfE', to:'0x1e8524370B7cAf8dC62E3eFfBcA04cCc8e493FfE', amt:0.0001, sig:'0x1337'} // default deposit tx
     let newPrimes = vector.hash(i, tx, checkpoint)
-    return [newPrimes, A_i, A_e]
+    return [newPrimes, previousTX]
   }
   // todo check primes included and sig matches
   // todo delete verified tx previousPrimes from A
@@ -298,19 +301,17 @@ class Operator {
     this.operator = new this.web3.eth.Contract(abi, operatorAddress)
     this.depositEvent = _registerEvents(this.operator)
     // mock memory database
-    this.A_i = g
-    this.A_e = g
-    this.blocks = []
-    this.ids_i = [] // total list of all accumulated primes
-    this.ids_e = [] 
     this.checkpoints = []
     this.accounts = {} // todo database
-    this.block_height = 0
     this.deposits = {} //
 
-    this.depositEvent.on('data',(event)=>{
+    this.depositEvent.on('data',async (event)=>{
+      let blocksdb = this.db.collection('Blocks')
+      let oldBlock = await blocksdb.find().limit(1).sort({$natural:-1})
+      oldBlock = await oldBlock.toArray()
       let b = _handleDeposit(event)
-      b['BlockNumber'] = this.block_height
+      let h = parseInt(oldBlock[0].BlockNumber)+1
+      b['BlockNumber'] = h
       console.log(b)
       this.addBlock(b)
     })
@@ -329,7 +330,9 @@ class Operator {
     }
 
     let blockdb = this.db.collection('Blocks')
-    await blockdb.insertOne({BlockNumber:0, A_i:3, A_e:3, txs:[]})
+    let tb = await blockdb.find({BlockNumber:0})
+    tb = await tb.toArray()
+    if(tb[0] === undefined) await blockdb.insertOne({BlockNumber:0, A_i:3, A_e:3, txs:[]})
     return this.checkpoints
   }
 
@@ -346,16 +349,19 @@ class Operator {
     let blocksdb = this.db.collection('Blocks')
     let depositsdb = this.db.collection('Deposits')
     let checkdb = this.db.collection('Checkpoints')
+    let primes_i_db = this.db.collection('Primes_i')
+    let primes_e_db = this.db.collection('Primes_e')
 
     let prevBlock = await blocksdb.find({BlockNumber:parseInt(block.BlockNumber)-1})
     prevBlock = await prevBlock.toArray()
-    let a_i = bigInt(prevBlock[0].A_i)
-    let a_e = bigInt(prevBlock[0].A_e)
     // todo verify txs
     // get primes
     let p_i = []
     let p_e = []
-    let p
+    let p_t
+
+    let a_i
+    let a_e
 
     let product = bigInt(1)
 
@@ -365,15 +371,20 @@ class Operator {
       t = await t.toArray()
       let f = await accountdb.find({address: block.txs[i].from})
       f = await f.toArray()
+
+      p_t = verifyTX(block.txs[i], prevBlock[0], this.checkpoints)
+
       // account database generated from utxo set
-      if(block.txs[i].inputs[0] === null) {
-        if(t[0] === undefined) {
+      if(block.txs[i].inputs[0] === null) { // handle deposit
+        if(t[0] === undefined) { // handle new account
           await accountdb.insertOne({address: block.txs[i].to, balance:block.txs[i].amt, coinIDs:[]})
         } else {
           newBal = parseFloat(t[0].balance) + parseFloat(block.txs[i].amt)
           newBal = newBal.toFixed(4)
           await accountdb.updateOne({address: block.txs[i].to},{$set:{balance:newBal}})
         }
+        a_i = bigInt(prevBlock[0].A_i)
+        a_e = bigInt(prevBlock[0].A_e)
         //store deposit
         await depositsdb.insertOne({address: block.txs[i].to, finalized: true})
       } else {
@@ -383,31 +394,32 @@ class Operator {
         newBal = parseFloat(f[0].balance) - parseFloat(block.txs[i].amt)
         newBal = newBal.toFixed(4)
         await accountdb.updateOne({address: block.txs[i].from}, {$set:{balance:newBal}})
-      }
 
-      p = verifyTX(block.txs[i], prevBlock[0], a_i, a_e, this.checkpoints)
-      // add new elements
-      let accumElems = bigInt(1)
-      for(var j=0; j<p[0][0].length; j++) {
-        this.A_i = _addElement(p[0][0][j], a_i, N)
-        this.ids_i.push(p[0][0][j]) // todo adjust ids for 1 index 256 primes
+        let incProof = await this.getSingleInclusionProof(block.tx[i].index, p_t[1])
+        a_i = incProof[0]
+        a_e = incProof[1]
       }
-      for(var k=0; k<p[0][1].length; k++) {
-        this.A_e = _addElement(p[0][1][k], a_e, N)
-        this.ids_e.push(p[0][1][k])
+      // add new elements
+
+      //TODO: remove old primes of previousTX from Primes
+
+      let accumElems = bigInt(1)
+      for(var j=0; j<p_t[0][0].length; j++) {
+        a_i = _addElement(p_t[0][0][j], a_i, N)
+        await primes_i_db.insertOne({Prime:p_t[0][0][j].toString()})
+      }
+      for(var k=0; k<p_t[0][1].length; k++) {
+        a_e = _addElement(p_t[0][1][k], a_e, N)
+        await primes_e_db.insertOne({Prime:p_t[0][1][k].toString()})
       }
     }
+
     block.A_i = a_i.toString()
     block.A_e = a_e.toString()
     // store block in db
     await blocksdb.insertOne(block)
-    this.blocks.push(block)
-    this.block_height++
 
-    this.A_i = p[1]
-    this.A_e = p[2]
-
-    return p
+    return p_t
   }
 
   getAccumulators() {
@@ -437,10 +449,13 @@ class Operator {
   }
 
   // int v: index of coin to get proof
-  getSingleInclusionProof(v, inputs) {
+  async getSingleInclusionProof(v, inputs) {
+    let primes_i_db = this.db.collection('Primes_i')
+    let primes_e_db = this.db.collection('Primes_e')
     // generate primes from v client side as well for verification
     let vector = new Vector_H2P()
-    let tx = this.blocks[inputs[0]].txs[inputs[1]]
+    //let tx = this.blocks[inputs[0]].txs[inputs[1]]
+    let tx = inputs
     console.log('-------')
     console.log(tx)
     let id_range = _convertIndex(v)
@@ -450,7 +465,7 @@ class Operator {
     // let bal = await this.web3.eth.getBalance('0x38a583c19540f9f34D94166da2D4401352f4b0F7')
     // console.log(bal)
 
-    let proof = _getInclusionWitness(v, id_range, ids, [this.ids_i, this.ids_e])
+    let proof = await _getInclusionWitness(v, id_range, ids, primes_i_db, primes_e_db)
     console.log('proof: ' + proof)
     return proof
   }

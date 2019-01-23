@@ -7,8 +7,12 @@ var appRouter = function (app, op) {
 
   app.post("/getAccountBalance", async function(req, res) {
     let bal = await op.getAccountBalance(req.body.user)
-    if(bal.length === 0) bal = 0
-    res.status(200).send(bal[0].balance)
+    if(bal.length === 0) {
+      bal = 0
+      res.status(200).send('0')
+    }else {
+      res.status(200).send(bal[0].balance.toString())
+    }
   })
 
   app.post("/checkDeposit", async function(req, res) {
