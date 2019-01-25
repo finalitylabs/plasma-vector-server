@@ -24,7 +24,7 @@ async function main() {
 
   let b0 = {BlockNumber:1, A_i:A_i_init, A_e:A_e_init, txs:[tx0, tx1]}
   //let primes = await op.addBlock(b0)
-  let prf = await op.getSingleInclusionProof(215,tx0)
+  //let prf = await op.getSingleInclusionProof(215,tx0)
 
   var whitelist = [
     'http://localhost:8080',

@@ -15,17 +15,18 @@ var appRouter = function (app, op) {
     }
   })
 
-  app.post("/depositID", async function(req, res) {
+  app.post("/transfer", async function(req, res) {
     // parse req for address and amt
     console.log(req.body)
-    let deposit = await op.checkDeposit(req.body.txhash)
+    let transfer = await op.transfer(req.body.ins, req.body.v, req.body.to, req.body.from, req.body.amt)
     res.status(200).send("deposit status")
   })
 
-  app.post("/checkDeposit", async function(req, res) {
+  app.post("/deposit", async function(req, res) {
     // parse req for address and amt
-    let deposit = await op.checkDeposit(req.body.hash)
-    res.status(200).send("deposit status")
+    console.log(req.body)
+    let offset = await op.checkDeposit(req.body.txhash)
+    res.status(200).send(offset)
   })
 
   app.post("/getIDs", function(req, res) {

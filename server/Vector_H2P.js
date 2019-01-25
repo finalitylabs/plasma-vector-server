@@ -48,7 +48,8 @@ class Vector_H2P {
     let h = utils.soliditySha3(
       { type: 'address', value: input.from },
       { type: 'address', value: input.to },
-      { type: 'uint256', value: input.amt })
+      { type: 'uint256', value: input.amt },
+      { type: 'uint256', value: input.index[0]})
 
     let bin = hex2bin(h.slice(2,66))
     // getCheckpointIndex(input.index) // hardcoded at 700 for now

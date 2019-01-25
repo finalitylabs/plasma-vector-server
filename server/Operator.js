@@ -261,18 +261,20 @@ function verifyTX(tx, previousBlock, checkpoints, primes_i, primes_e, x) {
     // get new primes
     // this only works for one coin per block
     i = _convertIndex(tx.index)
-    tx.amt = tx.amt*10000
     checkpoint = _getCheckpoint(i[0], checkpoints)
     let newPrimes = vector.hash(i, tx, checkpoint)
     return [newPrimes]
   } else { // deposit tx
     // todo abi pack tx to bytes?
-    let i = _convertIndex(tx.index)
-    tx.amt = tx.amt*10000
-    checkpoint = _getCheckpoint(i[0], checkpoints)
-    previousTX = {index: 1, inputs:[0,0], from:'0x1e8524370B7cAf8dC62E3eFfBcA04cCc8e493FfE', to:'0x1e8524370B7cAf8dC62E3eFfBcA04cCc8e493FfE', amt:0.0001, sig:'0x1337'} // default deposit tx
-    let newPrimes = vector.hash(i, tx, checkpoint)
-    return [newPrimes]
+    let newPrimes = []
+    for(var l=0; l<tx.amt; l++) {
+      let i = _convertIndex(parseInt(tx.index[0])+l)
+      console.log(parseInt(tx.index[0])+l)
+      console.log(i)
+      checkpoint = _getCheckpoint(i[0], checkpoints)
+      newPrimes.push(vector.hash(i, tx, checkpoint))
+    }
+    return newPrimes
   }
   // todo check primes included and sig matches
   // todo delete verified tx previousPrimes from A
@@ -309,7 +311,7 @@ function _handleDeposit(deposit){
 
   // for now just submit a new block for every deposit
   let tx = {
-    index: offset,
+    index: [parseInt(offset)-parseInt(amt),0],
     inputs: [null,0],
     from: '0x1e8524370B7cAf8dC62E3eFfBcA04cCc8e493FfE',
     to: depositer,
@@ -370,6 +372,14 @@ class Operator {
     return account
   }
 
+  async transfer(ins, v, to, from, amount) {
+    console.log(to)
+    let tx = {
+      index: [v[0], v[1]],
+      inputs: [ins[0], ins[1]]
+    }
+  }
+
   async addBlock(block) {
     console.log('adding list of txs to accumulator')
     let accountdb = this.db.collection('Accounts')
@@ -418,7 +428,7 @@ class Operator {
         await depositsdb.insertOne({address: block.txs[i].to, finalized: true})
       } else { // handle transfer
 
-        let parentBlock = await blocksdb.find({BlockNumber:parseInt(block.txs[i].index[0])})
+        let parentBlock = await blocksdb.find({BlockNumber:parseInt(block.txs[i].inputs[0])})
         parentBlock = await prevBlock.toArray()
 
         p_t = verifyTX(block.txs[i], parentBlock[0], this.checkpoints, primes_i_db, primes_e_db)   
@@ -442,15 +452,17 @@ class Operator {
       let _x_i = bigInt(x[0].i)
       let _x_e = bigInt(x[0].e)
 
-      for(var j=0; j<p_t[0][0].length; j++) {
-        _x_i = _x_i.multiply(p_t[0][0][j])
-        a_i = _addElement(p_t[0][0][j], a_i, N)
-        await primes_i_db.insertOne({Prime:p_t[0][0][j].toString()})
-      }
-      for(var k=0; k<p_t[0][1].length; k++) {
-        _x_e = _x_e.multiply(p_t[0][1][k])
-        a_e = _addElement(p_t[0][1][k], a_e, N)
-        await primes_e_db.insertOne({Prime:p_t[0][1][k].toString()})
+      for(var g=0; g<p_t.length; g++) {
+        for(var j=0; j<p_t[g][0].length; j++) {
+          _x_i = _x_i.multiply(p_t[g][0][j])
+          a_i = _addElement(p_t[g][0][j], a_i, N)
+          await primes_i_db.insertOne({Prime:p_t[g][0][j].toString()})
+        }
+        for(var k=0; k<p_t[g][1].length; k++) {
+          _x_e = _x_e.multiply(p_t[g][1][k])
+          a_e = _addElement(p_t[g][1][k], a_e, N)
+          await primes_e_db.insertOne({Prime:p_t[g][1][k].toString()})
+        }
       }
 
       await prime_product.updateOne({ProductPointer:1}, {$set:{i: _x_i.toString(), e: _x_e.toString()}})
@@ -564,33 +576,37 @@ class Operator {
   //   return x
   // }
 
-  async checkDeposit(txhash) {
-    let depositsdb = this.db.collection('Deposits')
-    // let deposit = await depositsdb.find({Address:address})
-    // deposit = await deposit.toArray()
-    await waitForConfirm(txhash, this.web3)
-    let receipt = await this.web3.eth.getTransactionReceipt(txhash)
-    console.log(receipt.blockHash)
+  checkDeposit(txhash) {
+    let self=this
+    return new Promise(async function(resolve,reject) {
+      let depositsdb = self.db.collection('Deposits')
+      // let deposit = await depositsdb.find({Address:address})
+      // deposit = await deposit.toArray()
+      await waitForConfirm(txhash, self.web3)
+      let receipt = await self.web3.eth.getTransactionReceipt(txhash)
+      console.log(receipt.blockHash)
 
-    let event = this.operator.events.Deposit({depositer:receipt.from},{fromBlock:0})
+      let event = self.operator.events.Deposit({depositer:receipt.from},{fromBlock:0})
 
-    this.operator.getPastEvents('Deposit',{
-      fromBlock:0,
-      toBlock: 'latest',
-      filter: {depositer:receipt.from}
-    }, async (e,l) => {
-      for(var i=0; i<l.length; i++) {
-        if(l[i].transactionHash === txhash) {
-          let blocksdb = this.db.collection('Blocks')
-          let oldBlock = await blocksdb.find().limit(1).sort({$natural:-1})
-          oldBlock = await oldBlock.toArray()
-          let b = _handleDeposit(l[i])
-          let h = parseInt(oldBlock[0].BlockNumber)+1
-          b['BlockNumber'] = h
-          console.log(b)
-          this.addBlock(b)
+      self.operator.getPastEvents('Deposit',{
+        fromBlock:0,
+        toBlock: 'latest',
+        filter: {depositer:receipt.from}
+      }, async (e,l) => {
+        for(var i=0; i<l.length; i++) {
+          if(l[i].transactionHash === txhash) {
+            let blocksdb = self.db.collection('Blocks')
+            let oldBlock = await blocksdb.find().limit(1).sort({$natural:-1})
+            oldBlock = await oldBlock.toArray()
+            let b = _handleDeposit(l[i])
+            let h = parseInt(oldBlock[0].BlockNumber)+1
+            b['BlockNumber'] = h
+            console.log(b)
+            await self.addBlock(b)
+            resolve(l[i].returnValues.offset)
+          }
         }
-      }
+      })
     })
   }
 }
