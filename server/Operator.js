@@ -17,23 +17,33 @@ const N = bigInt('25195908475657893494027183240048398571429282126204032027777137
 
 const prf = [[3,{"z":"21168615609548963274120773781125946682012924743949643382984609636343780752590852431623545243690559728087464167257451146142014511943475871736448123249722526934984475917391577120492668201664401366525647576294036469362881559767267701611480215479660774128160904844722787611295835231112750261101051071045210061242152733299793980775255736477601140492662069823350772945309114544265072340356805999830133792688493138409639368847997116923156515164618235411593625929738995723868293013192260383273069063508808354833353653224646350898220907028233534489955864114405968333900340387229482333250078037077203432447845856434495735253977","Q":"18602306971653750378993013602774775581519230247417920727404942815228020731410127135598440244213443369539308748995643110532939931912222489724588397025472257067836023312902844756849512629632184983785389490691650430913721723637254539967524622047463251467931958675858934227118829987399027852749930104964296962314749519529019379489229878193145221549948807161492561728923094289857158613477414221922303013118525180993180713312794736729202550467024687448110260466100718399167330156640870843786731619862924221587016312146457082942677919830358834931910812876908047316533989720199993422347596379100692770711591216063616141033378","r":"890119234231"}],[3,{"z":"21124061955735513758522613782734450215460238456121743493470419985971356071885930069824796088797777543784499964006357800982514002726935713043287406316739474437315598047832248873603649104473538521937937248482325458674828953049967442578818796143842210088201753550334718323320852138008818738685357228797787464309567667909420981617358727231915162322692205604254990228905100619862744310189176403461870546369586708301360896403214977122595392190311692783896417721493904941044534191622019979692726846059181591027535560817554185104149445354832433091900144215350785543353100905096542835733665609890706371965266319072367103327094","Q":"9643426135116943066897783156959404142491728153144504090898428366009502770715260101637270964572525708777864078102081648538342803064204908806224455917562665985860723335875563292872324685127598837503849009324542257853484335024718176519180023575867207947674445232363821763992614878955066032642005825311846874235057258593809536333263677350421928769682590190388137946707029683322438867569204402694451021645727652796621198593764505168171290256960668292239770575841752450121032366554349781776274450114785967038181371718513415004744609141828467635685224202895810281891492109424185759320404728818042305635240880405892692636489","r":"165318556017"}]]
 
-const VLEN = 200000 // todo: 2^48
+const VLEN = 1000000 // todo: 2^48
 
-function _generatePrimeCheckpoints() {
+async function _generatePrimeCheckpoints(checkdb) {
   // todo, get VLEN from input, get db.Checkpoints.count()
   // if(count*100 < VLEN)... start from vlen-count
-  let checkpoints = []
+  let checkpoints = await checkdb.find()
+  checkpoints = await checkpoints.toArray()
   let primes = []
-  let lastPrime = bigInt(3)
-  checkpoints.push({index:1, prime:3})
+  let lastPrime
 
-  for(var j=2; j<VLEN; j++){
+  if(checkpoints[0] === undefined) {
+    checkpoints = []
+    lastPrime = bigInt(3)
+    checkpoints.push({index:1, prime:3})
+  } else {
+    lastPrime = bigInt(checkpoints[checkpoints.length-1].prime.value)
+  }
+
+  for(var j=checkpoints[checkpoints.length-1].index; j<VLEN; j++){
     while(true) {
       lastPrime = lastPrime.plus(2)
       if(lastPrime.isPrime()) break
     }
     if(j%100 === 0) {
-      checkpoints.push({index:j, prime:lastPrime})
+      checkpoints.push({index:j, prime:{value:lastPrime.toString(), sign:false, isSmall:true }})
+      console.log('adding ' + lastPrime.toString() + ' to database')
+      await checkdb.insertOne({index:j, prime:lastPrime})
     }
   }
 
@@ -333,15 +343,8 @@ class Operator {
 
   async init() {
     this.db = await connectDB()
-    this.checkpoints = _generatePrimeCheckpoints()
     let database = this.db.collection('Checkpoints')
-    for(var i=0; i<this.checkpoints.length; i++) {
-      let d = await database.find({index:this.checkpoints[i].index})
-      let _d = await d.toArray()
-      if(_d[0] === undefined) {
-        await database.insertOne(this.checkpoints[i])
-      }
-    }
+    this.checkpoints = await _generatePrimeCheckpoints(database)
 
     let blockdb = this.db.collection('Blocks')
     let tb = await blockdb.find({BlockNumber:0})
@@ -352,6 +355,12 @@ class Operator {
     let x = await prime_product.find({ProductPointer:1})
     x = await x.toArray()
     if(x[0] === undefined) await prime_product.insertOne({ProductPointer:1, i: 1, e: 1})
+
+    // init operator account
+    let accountdb = this.db.collection('Accounts')
+    let t = await accountdb.find({address:'0x1e8524370B7cAf8dC62E3eFfBcA04cCc8e493FfE'})
+    t = await t.toArray()
+    if(t[0] === undefined) accountdb.insertOne({address: '0x1e8524370B7cAf8dC62E3eFfBcA04cCc8e493FfE', balance:1337, coinIDs:[]})
 
     return this.checkpoints
   }
@@ -365,8 +374,18 @@ class Operator {
 
   async transfer(ins, to, from, start, end) {
     let blocksdb = this.db.collection('Blocks')
+    let accountdb = this.db.collection('Accounts')
     let oldBlock = await blocksdb.find().limit(1).sort({$natural:-1})
     oldBlock = await oldBlock.toArray()
+    let t = await accountdb.find({address: to})
+    t = await t.toArray()
+    let f = await accountdb.find({address: from})
+    f = await f.toArray()
+
+    // console.log(t[0])
+    // console.log(f[0])
+    // console.log(weeee)
+
     let tx = {
       index: [start, end],
       inputs: [ins[0], ins[1]],
@@ -409,6 +428,9 @@ class Operator {
       let f = await accountdb.find({address: block.txs[i].from})
       f = await f.toArray()
 
+      let coinsf
+      let coinst
+
       // create on function for deposit, one for transfer
       // account database generated from utxo set
       if(block.txs[i].inputs[0] === null) { // handle deposit
@@ -418,10 +440,14 @@ class Operator {
         p_t = await verifyTX(block.txs[i], prevBlock[0], this.checkpoints, primes_i_db, primes_e_db, prime_product)
 
         if(t[0] === undefined) { // handle new account
-          await accountdb.insertOne({address: block.txs[i].to, balance:_amt, coinIDs:[]})
+          coinst = []
+          coinst.push({Block:block.BlockNumber, ID:block.txs[i].index})
+          await accountdb.insertOne({address: block.txs[i].to, balance:_amt, coinIDs:coinst})
         } else {
+          coinst = t[0].coinIDs
+          coinst.push({Block:block.BlockNumber, ID:block.txs[i].index})
           newBal = parseInt(t[0].balance) + parseInt(_amt)
-          await accountdb.updateOne({address: block.txs[i].to},{$set:{balance:newBal}})
+          await accountdb.updateOne({address: block.txs[i].to},{$set:{balance:newBal, coinIDs:coinst}})
         }
 
         a_i = bigInt(prevBlock[0].A_i)
@@ -429,6 +455,22 @@ class Operator {
         //store deposit
         await depositsdb.insertOne({address: block.txs[i].to, finalized: true})
       } else { // handle transfer
+        coinsf = f[0].coinIDs
+        if(t[0] === undefined){
+          coinst = []
+        } else {
+          coinst = t[0].coinIDs
+        }
+
+        coinst.push({Block:block.BlockNumber, ID:block.txs[i].index})
+        // remove coin from the sender IDs account
+        let out = []
+        for(var n=0; n<coinsf.length; n++){
+          if(coinsf[n].ID[0] !== block.txs[i].index[0]) {
+            out.push(coinsf[n])
+          }
+        }
+        coinsf = out
 
         let parentBlock = await blocksdb.find({BlockNumber:parseInt(block.txs[i].inputs[0])})
         parentBlock = await parentBlock.toArray()
@@ -439,14 +481,14 @@ class Operator {
         a_e = bigInt(1)
 
         if(t[0] === undefined) { // handle new account
-          await accountdb.insertOne({address: block.txs[i].to, balance:_amt, coinIDs:[]})
+          await accountdb.insertOne({address: block.txs[i].to, balance:_amt, coinIDs:coinst})
         } else {
           newBal = parseInt(t[0].balance) + parseInt(_amt)
-          await accountdb.updateOne({address: block.txs[i].to},{$set:{balance:newBal}})
+          await accountdb.updateOne({address: block.txs[i].to},{$set:{balance:newBal, coinIDs:coinst}})
         }
 
         newBal = parseInt(f[0].balance) - parseInt(block.txs[i].amt)
-        await accountdb.updateOne({address: block.txs[i].from}, {$set:{balance:newBal}})
+        await accountdb.updateOne({address: block.txs[i].from}, {$set:{balance:newBal, coinIDs:coinsf}})
 
         //Todo get a_i and a_e from _deleteElement in verifyTx
         //a_i = incProof[0]
