@@ -29,6 +29,18 @@ var appRouter = function (app, op) {
     res.status(200).send(offset)
   })
 
+  app.post("/received", async function(req, res) {
+    // parse req for address
+    let coins
+    let account = await op.getAccountBalance(req.body.user)
+    if(account[0] === undefined) {
+      coins = []
+    } else {
+      coins = account[0].coinIDs
+    }
+    res.status(200).send(coins)
+  })
+
   app.post("/getIDs", function(req, res) {
     // parse req for address
     res.status(200).send("IDs")
