@@ -16,43 +16,8 @@ const N = bigInt('25195908475657893494027183240048398571429282126204032027777137
 // hex_N C7970CEEDCC3B0754490201A7AA613CD73911081C790F5F1A8726F463550BB5B7FF0DB8E1EA1189EC72F93D1650011BD721AEEACC2ACDE32A04107F0648C2813A31F5B0B7765FF8B44B4B6FFC93384B646EB09C7CF5E8592D40EA33C80039F35B4F14A04B51F7BFD781BE4D1673164BA8EB991C2C4D730BBBE35F592BDEF524AF7E8DAEFD26C66FC02C479AF89D64D373F442709439DE66CEB955F3EA37D5159F6135809F85334B5CB1813ADDC80CD05609F10AC6A95AD65872C909525BDAD32BC729592642920F24C61DC5B3C3B7923E56B16A4D9D373D8721F24A3FC0F1B3131F55615172866BCCC30F95054C824E733A5EB6817F7BC16399D48C6361CC7E5
 
 const prf = [[3,{"z":"21168615609548963274120773781125946682012924743949643382984609636343780752590852431623545243690559728087464167257451146142014511943475871736448123249722526934984475917391577120492668201664401366525647576294036469362881559767267701611480215479660774128160904844722787611295835231112750261101051071045210061242152733299793980775255736477601140492662069823350772945309114544265072340356805999830133792688493138409639368847997116923156515164618235411593625929738995723868293013192260383273069063508808354833353653224646350898220907028233534489955864114405968333900340387229482333250078037077203432447845856434495735253977","Q":"18602306971653750378993013602774775581519230247417920727404942815228020731410127135598440244213443369539308748995643110532939931912222489724588397025472257067836023312902844756849512629632184983785389490691650430913721723637254539967524622047463251467931958675858934227118829987399027852749930104964296962314749519529019379489229878193145221549948807161492561728923094289857158613477414221922303013118525180993180713312794736729202550467024687448110260466100718399167330156640870843786731619862924221587016312146457082942677919830358834931910812876908047316533989720199993422347596379100692770711591216063616141033378","r":"890119234231"}],[3,{"z":"21124061955735513758522613782734450215460238456121743493470419985971356071885930069824796088797777543784499964006357800982514002726935713043287406316739474437315598047832248873603649104473538521937937248482325458674828953049967442578818796143842210088201753550334718323320852138008818738685357228797787464309567667909420981617358727231915162322692205604254990228905100619862744310189176403461870546369586708301360896403214977122595392190311692783896417721493904941044534191622019979692726846059181591027535560817554185104149445354832433091900144215350785543353100905096542835733665609890706371965266319072367103327094","Q":"9643426135116943066897783156959404142491728153144504090898428366009502770715260101637270964572525708777864078102081648538342803064204908806224455917562665985860723335875563292872324685127598837503849009324542257853484335024718176519180023575867207947674445232363821763992614878955066032642005825311846874235057258593809536333263677350421928769682590190388137946707029683322438867569204402694451021645727652796621198593764505168171290256960668292239770575841752450121032366554349781776274450114785967038181371718513415004744609141828467635685224202895810281891492109424185759320404728818042305635240880405892692636489","r":"165318556017"}]]
-// TODO NI-PoKE* proof of exponent knowledge scheme
-
-// Vitalik proposal
-// for generator g, element to be proven included/excluded v
-// let x = cofactor of v
-// let h = g^v, z = h^x
-// B = hash(h,z) mod N
-// b = h^floor(x/B)
-// r = x mod B
-//
-// proof of exponent knowledge = (b, z)
-// verification: 
-// b^B * h^r = z
-// z = h^B*floor(x/B)+x mod B = h^x
 
 const VLEN = 200000 // todo: 2^48
-
-
-// s = start check point index
-// lastPrime = start check point prime
-// i = index to get prime for
-// e = end index for when to stop generating primes
-// function _idToPrime(s, i, lastPrime, e) {
-//   let primes = []
-//   let t = i+e
-//   for(var j=s; j<t; j++){
-//     while(true) {
-//       lastPrime = lastPrime.plus(1)
-//       if(lastPrime.isPrime()) break
-//     }
-//     if(j==i) {
-//       primes.push(lastPrime)
-//       i++
-//     }
-//   }
-//   return primes
-// }
 
 function _generatePrimeCheckpoints() {
   // todo, get VLEN from input, get db.Checkpoints.count()
@@ -81,10 +46,19 @@ function _addElement(element, accumulator) {
   return accumulator.modPow(element.toString(), N.toString())
 }
 
-function _deleteElement(v) {
-  v = bigInt(v)
-  console.log('deleting element: '+v+' from accumulator: '+this.A.toString())
-  this.A_i = _getInclusionWitness(v).z
+async function _deleteElement(primes, primedb, xdb, iore) {
+  let x = bigInt(1)
+  for(var i=0; i<primes.length; i++) {
+    console.log('deleting element: '+primes[i].toString())
+    x = x.multiply(primes[i].toString())
+    await primedb.deleteOne({Prime: primes[i].toString()})
+  }
+  let oldX = xdb.find().limit(1).sort({$natural:-1})
+  oldX = await oldX.toArray()
+  if(iore === 'i') oldX = bigInt(oldX[0].i)
+  if(iore === 'e') oldX = bigInt(oldX[0].e)
+  let newX = oldX.divide(x)
+  return newX
 }
 
 function _addElements(elements, accumulator) {
@@ -228,7 +202,7 @@ function _getCheckpoint(index, checkpoints) {
 
 // (bytes) TX { prevBlock, from, to, amt, sig }
 // for now verifyTX also removes previous tx from accumulator
-function verifyTX(tx, previousBlock, checkpoints, primes_i, primes_e, x) {
+async function verifyTX(tx, previousBlock, checkpoints, primes_i, primes_e, x) {
   let vector = new Vector_H2P()
   let previousTX
   let checkpoint
@@ -236,9 +210,8 @@ function verifyTX(tx, previousBlock, checkpoints, primes_i, primes_e, x) {
   let A_e
   if(tx.inputs[0] !== null) {
     previousTX = previousBlock.txs[tx.inputs[1]]
-    let i = _convertIndex(previousTX.index)
-    checkpoint = _getCheckpoint(i[0], checkpoints)
-    let previousPrimes = vector.hash(i, previousTX, checkpoint)
+    console.log(previousTX)
+    // require previousTX.to === tx.from
     // check previous primes are in A
     let prev_pi = previousTX.proof
     // and divide stored x by product of deleted primes
@@ -250,20 +223,38 @@ function verifyTX(tx, previousBlock, checkpoints, primes_i, primes_e, x) {
       return false
     } 
     console.log(true)
-    // delete previousPrimes product from x
-    // delete p_i primes from x_i
-    _deleteElement(previousTX.index, previousPrimes[0], primes_i, x)
-    // delete p_e primes from x_e
-    _deleteElement(previousTX.index, previousPrimes[0], primes_e, x)
-    // A = g^new x value after deletion
-    A_i = prev_pi[0].z
-    A_e = prev_pi[1].z
+
+    let i
+    let oldPrimes
+    let x_i
+    let x_e
+    // this does not work with merging/splitting!
+    for(var l=0; l<previousTX.amt; l++) {
+      i = _convertIndex(parseInt(previousTX.index[0])+l)
+      console.log(parseInt(previousTX.index[0])+l)
+      checkpoint = _getCheckpoint(i[0], checkpoints)
+      oldPrimes = vector.hash(i, previousTX, checkpoint)
+      // delete previousPrimes product from x
+      // delete p_i primes from x_i
+      x_i = await _deleteElement(oldPrimes[0], primes_i, x, 'i') // dont calculate
+      // delete p_e primes from x_e
+      x_e = await _deleteElement(oldPrimes[1], primes_e, x, 'e')
+      // A = g^new x value after deletion
+    }
+
+    // TODO: this is very slow, use inclusion proofs
+    //A_i = g.modPow(x_i, N)
+    //A_e = g.modPow(x_e, N)
+
     // get new primes
-    // this only works for one coin per block
-    i = _convertIndex(tx.index)
-    checkpoint = _getCheckpoint(i[0], checkpoints)
-    let newPrimes = vector.hash(i, tx, checkpoint)
-    return [newPrimes]
+    let newPrimes = []
+    for(var l=0; l<tx.amt; l++) {
+      i = _convertIndex(parseInt(tx.index[0])+l)
+      console.log(parseInt(tx.index[0])+l)
+      checkpoint = _getCheckpoint(i[0], checkpoints)
+      newPrimes.push(vector.hash(i, tx, checkpoint))
+    }
+    return newPrimes
   } else { // deposit tx
     // todo abi pack tx to bytes?
     let newPrimes = []
@@ -311,7 +302,7 @@ function _handleDeposit(deposit){
 
   // for now just submit a new block for every deposit
   let tx = {
-    index: [parseInt(offset)-parseInt(amt),0],
+    index: [parseInt(offset)-parseInt(amt),parseInt(offset)],
     inputs: [null,0],
     from: '0x1e8524370B7cAf8dC62E3eFfBcA04cCc8e493FfE',
     to: depositer,
@@ -372,12 +363,23 @@ class Operator {
     return account
   }
 
-  async transfer(ins, v, to, from, amount) {
-    console.log(to)
+  async transfer(ins, to, from, start, end) {
+    let blocksdb = this.db.collection('Blocks')
+    let oldBlock = await blocksdb.find().limit(1).sort({$natural:-1})
+    oldBlock = await oldBlock.toArray()
     let tx = {
-      index: [v[0], v[1]],
-      inputs: [ins[0], ins[1]]
+      index: [start, end],
+      inputs: [ins[0], ins[1]],
+      from: from,
+      to: to,
+      amt: parseInt(end)-parseInt(start),
+      sig: '0x1337',
+      proof: prf
     }
+    console.log(tx)
+    let b0 = {BlockNumber:parseInt(oldBlock[0].BlockNumber)+1,txs:[tx]}
+    await this.addBlock(b0)
+    return true
   }
 
   async addBlock(block) {
@@ -413,7 +415,7 @@ class Operator {
         let prevBlock = await blocksdb.find({BlockNumber:parseInt(block.BlockNumber)-1})
         prevBlock = await prevBlock.toArray()
 
-        p_t = verifyTX(block.txs[i], prevBlock[0], this.checkpoints, primes_i_db, primes_e_db)
+        p_t = await verifyTX(block.txs[i], prevBlock[0], this.checkpoints, primes_i_db, primes_e_db, prime_product)
 
         if(t[0] === undefined) { // handle new account
           await accountdb.insertOne({address: block.txs[i].to, balance:_amt, coinIDs:[]})
@@ -429,18 +431,24 @@ class Operator {
       } else { // handle transfer
 
         let parentBlock = await blocksdb.find({BlockNumber:parseInt(block.txs[i].inputs[0])})
-        parentBlock = await prevBlock.toArray()
+        parentBlock = await parentBlock.toArray()
 
-        p_t = verifyTX(block.txs[i], parentBlock[0], this.checkpoints, primes_i_db, primes_e_db)   
+        p_t = await verifyTX(block.txs[i], parentBlock[0], this.checkpoints, primes_i_db, primes_e_db, prime_product)   
+        // todo get, a_i and a_e from p_t
+        a_i = bigInt(1)
+        a_e = bigInt(1)
 
-        newBal = parseFloat(t[0].balance) + parseFloat(block.txs[i].amt)
-        newBal = newBal.toFixed(4)
-        await accountdb.updateOne({address: block.txs[i].to}, {$set:{balance:newBal}})
-        newBal = parseFloat(f[0].balance) - parseFloat(block.txs[i].amt)
-        newBal = newBal.toFixed(4)
+        if(t[0] === undefined) { // handle new account
+          await accountdb.insertOne({address: block.txs[i].to, balance:_amt, coinIDs:[]})
+        } else {
+          newBal = parseInt(t[0].balance) + parseInt(_amt)
+          await accountdb.updateOne({address: block.txs[i].to},{$set:{balance:newBal}})
+        }
+
+        newBal = parseInt(f[0].balance) - parseInt(block.txs[i].amt)
         await accountdb.updateOne({address: block.txs[i].from}, {$set:{balance:newBal}})
 
-        //let incProof = await this.getSingleInclusionProof(block.tx[i].index, p_t[1])
+        //Todo get a_i and a_e from _deleteElement in verifyTx
         //a_i = incProof[0]
         //a_e = incProof[1]
       }
@@ -603,7 +611,8 @@ class Operator {
             b['BlockNumber'] = h
             console.log(b)
             await self.addBlock(b)
-            resolve(l[i].returnValues.offset)
+            let res = {offset:l[i].returnValues.offset, block:h}
+            resolve(res) // todo get  blocknum from db
           }
         }
       })

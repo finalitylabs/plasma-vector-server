@@ -17,8 +17,7 @@ var appRouter = function (app, op) {
 
   app.post("/transfer", async function(req, res) {
     // parse req for address and amt
-    console.log(req.body)
-    let transfer = await op.transfer(req.body.ins, req.body.v, req.body.to, req.body.from, req.body.amt)
+    let transfer = await op.transfer(req.body.ins, req.body.to, req.body.from, req.body.start, req.body.end)
     res.status(200).send("deposit status")
   })
 
@@ -26,6 +25,7 @@ var appRouter = function (app, op) {
     // parse req for address and amt
     console.log(req.body)
     let offset = await op.checkDeposit(req.body.txhash)
+    console.log(offset)
     res.status(200).send(offset)
   })
 
