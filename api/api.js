@@ -18,7 +18,8 @@ var appRouter = function (app, op) {
   app.post("/transfer", async function(req, res) {
     // parse req for address and amt
     let transfer = await op.transfer(req.body.ins, req.body.to, req.body.from, req.body.start, req.body.end)
-    res.status(200).send("deposit status")
+    console.log(transfer)
+    res.status(200).send({tansfer_status:'good'})
   })
 
   app.post("/deposit", async function(req, res) {

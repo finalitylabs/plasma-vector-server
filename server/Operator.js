@@ -9,7 +9,7 @@ const Web3 = require('web3')
 const MongoClient = require('mongodb').MongoClient
 const dburl = 'mongodb://localhost/Operator_test'
 const abi = require('./abi.js')
-const operatorAddress = '0x8b9ffe438a877797385f1994270ec0d4e8cabc55'
+const operatorAddress = '0xbe6d157643d2968077464b8602ff8447fdd9edb0'
 
 const g = bigInt(3)
 const N = bigInt('25195908475657893494027183240048398571429282126204032027777137836043662020707595556264018525880784406918290641249515082189298559149176184502808489120072844992687392807287776735971418347270261896375014971824691165077613379859095700097330459748808428401797429100642458691817195118746121515172654632282216869987549182422433637259085141865462043576798423387184774447920739934236584823824281198163815010674810451660377306056201619676256133844143603833904414952634432190114657544454178424020924616515723350778707749817125772467962926386356373289912154831438167899885040445364023527381951378636564391212010397122822120720357')
@@ -51,18 +51,16 @@ async function _generatePrimeCheckpoints(checkdb) {
 }
 
 function _addElement(element, accumulator) {
-  //console.log('adding element: '+element+' to accumulator: '+accumulator.toString())
-  console.log('adding element: '+element)
   return accumulator.modPow(element.toString(), N.toString())
 }
 
 async function _deleteElement(primes, primedb, xdb, iore) {
   let x = bigInt(1)
   for(var i=0; i<primes.length; i++) {
-    console.log('deleting element: '+primes[i].toString())
     x = x.multiply(primes[i].toString())
     await primedb.deleteOne({Prime: primes[i].toString()})
   }
+  console.log('deleted '+iore+' primes: '+primes[0]+' to: '+primes[primes.length-1])
   let oldX = xdb.find().limit(1).sort({$natural:-1})
   oldX = await oldX.toArray()
   if(iore === 'i') oldX = bigInt(oldX[0].i)
@@ -110,10 +108,10 @@ function _verifyPoKE(proof, v) {
 // int v: coin id
 // [] idrange: coin id converted to vector range
 // [] ids: all coin id (v) primes in [] ids_i. [] ids_e
-// [] ids_t: all primes in A_i and A_e
+// pointer primes_i: db instance of all inclusion primes
+// pointer primes_e: db instance of all exclusion primes
+// [] primes_product: product of all primes
 async function _getInclusionWitness(v, id_range, ids, primes_i, primes_e, _x){
-  //let id_map_i = {}
-  //let id_map_e = {}
   let w_i = bigInt(1)
   let w_e = bigInt(1)
   let _x_i = bigInt(_x[0].i)
@@ -121,19 +119,18 @@ async function _getInclusionWitness(v, id_range, ids, primes_i, primes_e, _x){
 
   for(var f=0; f<ids[0].length;f++){
     w_i = w_i.multiply(ids[0][f])
-    //id_map_i[ids[0][f].toString()] = 1
   }
   for(var s=0; s<ids[1].length;s++){
     w_e = w_e.multiply(ids[1][s])
-    //id_map_e[ids[1][s].toString()] = 1
   }
 
   w_i = _x_i.divide(w_i)
   w_e = _x_e.divide(w_e)
 
+  console.log('calculating new A_i')
   let z_i = g.modPow(w_i, N) // g^x
+  console.log('calculating new A_e')
   let z_e = g.modPow(w_e, N) // g^x
-  //let x_ = bigInt(1) // cofactors
   let pi_i // {z, Q, r}
 
   // await primes_i.find().forEach((_p)=>{
@@ -249,7 +246,6 @@ async function verifyTX(tx, previousBlock, checkpoints, primes_i, primes_e, x) {
       x_i = await _deleteElement(oldPrimes[0], primes_i, x, 'i') // dont calculate
       // delete p_e primes from x_e
       x_e = await _deleteElement(oldPrimes[1], primes_e, x, 'e')
-      // A = g^new x value after deletion
     }
 
     // TODO: this is very slow, use inclusion proofs
@@ -272,7 +268,7 @@ async function verifyTX(tx, previousBlock, checkpoints, primes_i, primes_e, x) {
       let i = _convertIndex(parseInt(tx.index[0])+l)
       console.log(parseInt(tx.index[0])+l)
       console.log(i)
-      checkpoint = _getCheckpoint(i[0], checkpoints)
+      checkpoint = _getCheckpoint(i[0], checkpoints) // TODO: bug with first coin where index is 0 (generate primes doesn't have a 0 index, starts at)
       newPrimes.push(vector.hash(i, tx, checkpoint))
     }
     return newPrimes
@@ -508,11 +504,13 @@ class Operator {
           a_i = _addElement(p_t[g][0][j], a_i, N)
           await primes_i_db.insertOne({Prime:p_t[g][0][j].toString()})
         }
+        console.log('added inclusion primes: ' +p_t[g][0][0]+' to: '+p_t[g][0][p_t[g][0].length-1])
         for(var k=0; k<p_t[g][1].length; k++) {
           _x_e = _x_e.multiply(p_t[g][1][k])
           a_e = _addElement(p_t[g][1][k], a_e, N)
           await primes_e_db.insertOne({Prime:p_t[g][1][k].toString()})
         }
+        console.log('added exclusion primes: ' +p_t[g][1][0]+' to: '+p_t[g][1][p_t[g][1].length-1])
       }
 
       await prime_product.updateOne({ProductPointer:1}, {$set:{i: _x_i.toString(), e: _x_e.toString()}})
