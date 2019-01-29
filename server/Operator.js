@@ -209,15 +209,18 @@ function _getCheckpoint(index, checkpoints) {
 
 // (bytes) TX { prevBlock, from, to, amt, sig }
 // for now verifyTX also removes previous tx from accumulator
-async function verifyTX(tx, previousBlock, checkpoints, primes_i, primes_e, x) {
+async function verifyTX(tx, previousBlock, checkpoints, primes_i, primes_e, x, inputNum) {
   let vector = new Vector_H2P()
   let previousTX
   let checkpoint
   let A_i
   let A_e
-  if(tx.inputs[0] !== null) {
-    previousTX = previousBlock.txs[tx.inputs[1]]
+  if(tx.from !== '0x1e8524370B7cAf8dC62E3eFfBcA04cCc8e493FfE') { // handle transfer
+    previousTX = previousBlock.txs[tx.inputs[inputNum][1]]
+    console.log('prev tx')
     console.log(previousTX)
+    console.log('new tx ')
+    console.log(tx)
     // require previousTX.to === tx.from
     // check previous primes are in A
     let prev_pi = previousTX.proof
@@ -237,10 +240,9 @@ async function verifyTX(tx, previousBlock, checkpoints, primes_i, primes_e, x) {
     let x_e
     // this does not work with merging/splitting!
     for(var l=0; l<previousTX.amt; l++) {
-      i = _convertIndex(parseInt(previousTX.index[0])+l)
-      console.log(parseInt(previousTX.index[0])+l)
+      i = _convertIndex(parseInt(previousTX.index[0][0])+l)
       checkpoint = _getCheckpoint(i[0], checkpoints)
-      oldPrimes = vector.hash(i, previousTX, checkpoint)
+      oldPrimes = vector.hash(i, previousTX, checkpoint, inputNum)
       // delete previousPrimes product from x
       // delete p_i primes from x_i
       x_i = await _deleteElement(oldPrimes[0], primes_i, x, 'i') // dont calculate
@@ -252,24 +254,23 @@ async function verifyTX(tx, previousBlock, checkpoints, primes_i, primes_e, x) {
     //A_i = g.modPow(x_i, N)
     //A_e = g.modPow(x_e, N)
 
-    // get new primes
+    // get new primes, todo, move this out to addBlock, this is called for every input but is always the same
     let newPrimes = []
     for(var l=0; l<tx.amt; l++) {
-      i = _convertIndex(parseInt(tx.index[0])+l)
-      console.log(parseInt(tx.index[0])+l)
+      i = _convertIndex(parseInt(tx.index[0][0])+l)
       checkpoint = _getCheckpoint(i[0], checkpoints)
-      newPrimes.push(vector.hash(i, tx, checkpoint))
+      newPrimes.push(vector.hash(i, tx, checkpoint, inputNum))
     }
     return newPrimes
   } else { // deposit tx
     // todo abi pack tx to bytes?
     let newPrimes = []
     for(var l=0; l<tx.amt; l++) {
-      let i = _convertIndex(parseInt(tx.index[0])+l)
-      console.log(parseInt(tx.index[0])+l)
+      let i = _convertIndex(parseInt(tx.index[0][0])+l)
+      console.log(parseInt(tx.index[0][0])+l)
       console.log(i)
       checkpoint = _getCheckpoint(i[0], checkpoints) // TODO: bug with first coin where index is 0 (generate primes doesn't have a 0 index, starts at)
-      newPrimes.push(vector.hash(i, tx, checkpoint))
+      newPrimes.push(vector.hash(i, tx, checkpoint, inputNum))
     }
     return newPrimes
   }
@@ -308,8 +309,8 @@ function _handleDeposit(deposit){
 
   // for now just submit a new block for every deposit
   let tx = {
-    index: [parseInt(offset)-parseInt(amt),parseInt(offset)],
-    inputs: [null,0],
+    index: [[parseInt(offset)-parseInt(amt),parseInt(offset)]],
+    inputs: [[null,0]],
     from: '0x1e8524370B7cAf8dC62E3eFfBcA04cCc8e493FfE',
     to: depositer,
     amt: amt,
@@ -368,7 +369,7 @@ class Operator {
     return account
   }
 
-  async transfer(ins, to, from, start, end) {
+  async transfer(ins, to, from, indices, amt) {
     let blocksdb = this.db.collection('Blocks')
     let accountdb = this.db.collection('Accounts')
     let oldBlock = await blocksdb.find().limit(1).sort({$natural:-1})
@@ -383,18 +384,18 @@ class Operator {
     // console.log(weeee)
 
     let tx = {
-      index: [start, end],
-      inputs: [ins[0], ins[1]],
+      index: indices, // [[start,end],...]
+      inputs: ins, // [[blockNum, txNum],...] TODO: expand to include multiple block inputs for multple coin tx
       from: from,
       to: to,
-      amt: parseInt(end)-parseInt(start),
+      amt: amt,
       sig: '0x1337',
-      proof: prf
+      proof: prf // todo
     }
     console.log(tx)
     let b0 = {BlockNumber:parseInt(oldBlock[0].BlockNumber)+1,txs:[tx]}
     await this.addBlock(b0)
-    return true
+    return b0.BlockNumber
   }
 
   async addBlock(block) {
@@ -429,11 +430,12 @@ class Operator {
 
       // create on function for deposit, one for transfer
       // account database generated from utxo set
-      if(block.txs[i].inputs[0] === null) { // handle deposit
+      if(block.txs[i].from === '0x1e8524370B7cAf8dC62E3eFfBcA04cCc8e493FfE') { // handle deposit
+
         let prevBlock = await blocksdb.find({BlockNumber:parseInt(block.BlockNumber)-1})
         prevBlock = await prevBlock.toArray()
 
-        p_t = await verifyTX(block.txs[i], prevBlock[0], this.checkpoints, primes_i_db, primes_e_db, prime_product)
+        p_t = await verifyTX(block.txs[i], prevBlock[0], this.checkpoints, primes_i_db, primes_e_db, prime_product, 0)
 
         if(t[0] === undefined) { // handle new account
           coinst = []
@@ -450,29 +452,60 @@ class Operator {
         a_e = bigInt(prevBlock[0].A_e)
         //store deposit
         await depositsdb.insertOne({address: block.txs[i].to, finalized: true})
+
       } else { // handle transfer
-        coinsf = f[0].coinIDs
+        coinsf = f[0].coinIDs // {Block:blocknum, IDs:[[start, end],...]}
         if(t[0] === undefined){
           coinst = []
         } else {
           coinst = t[0].coinIDs
         }
 
-        coinst.push({Block:block.BlockNumber, ID:block.txs[i].index})
+        for(var u=0; u<block.txs[i].index.length; u++){
+          coinst.push({Block:block.BlockNumber, ID:[block.txs[i].index[u]]})
+        }
+        console.log(coinst)
+        console.log(coinsf)
+
         // remove coin from the sender IDs account
         let out = []
-        for(var n=0; n<coinsf.length; n++){
-          if(coinsf[n].ID[0] !== block.txs[i].index[0]) {
-            out.push(coinsf[n])
+        let total = 0
+        let newStart = coinsf[coinsf.length-1].ID[0][1]
+        for(var n=0; n<coinsf.length; n++){ // for each block
+          console.log('length of coins IDs '+coinsf.length)
+          let isin = false
+          for(var _r=0; _r<block.txs[i].index.length; _r++) {
+            if(coinsf[n].ID[0][0] === block.txs[i].index[_r][0]) {
+              console.log('index from db '+coinsf[n].ID[0][0])
+              console.log('index from tx '+block.txs[i].index[_r][0])
+              //out.push(coinsf[n])
+              let o = coinsf[n].ID[0][1] - coinsf[n].ID[0][0]
+              total = total + o
+              isin = true
+            }
           }
+          if(isin === false) out.push(coinsf[n])
         }
         coinsf = out
+        console.log(coinsf)
+        if(total > block.txs[i].amt) {
+          console.log('inputs total more than sent by')
+          let off = total - block.txs[i].amt
+          console.log(off)
+          coinsf.push({Block:block.BlockNumber, ID:[[newStart-off,newStart]]})
+        }
 
-        let parentBlock = await blocksdb.find({BlockNumber:parseInt(block.txs[i].inputs[0])})
-        parentBlock = await parentBlock.toArray()
+        let parentBlocks = []
+        let parentBlock
+        for(var _y=0; _y<block.txs[i].index.length; _y++){
+          let parentBlock = await blocksdb.find({BlockNumber:parseInt(block.txs[i].inputs[_y][0])})
+          parentBlock = await parentBlock.toArray()
+          console.log('found input: '+block.txs[i].index[_y][0] + ' parent block: '+ parentBlock[0].BlockNumber)
+          // todo give inputs index in block, dont assume 0
+          p_t = await verifyTX(block.txs[i], parentBlock[0], this.checkpoints, primes_i_db, primes_e_db, prime_product, _y)   
+          // todo get, a_i and a_e from p_t
+        }
 
-        p_t = await verifyTX(block.txs[i], parentBlock[0], this.checkpoints, primes_i_db, primes_e_db, prime_product)   
-        // todo get, a_i and a_e from p_t
         a_i = bigInt(1)
         a_e = bigInt(1)
 
@@ -565,7 +598,7 @@ class Operator {
     let id_range = _convertIndex(v)
     console.log(id_range)
     let checkpoint = _getCheckpoint(id_range[0], this.checkpoints)
-    let ids = vector.hash(id_range, tx, checkpoint)
+    let ids = vector.hash(id_range, tx, checkpoint, 0) // todo, get which index in the tx this inclusion proof is for
 
 
     let proof = await _getInclusionWitness(v, id_range, ids, primes_i_db, primes_e_db, _x)

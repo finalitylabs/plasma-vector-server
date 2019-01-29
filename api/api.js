@@ -17,9 +17,9 @@ var appRouter = function (app, op) {
 
   app.post("/transfer", async function(req, res) {
     // parse req for address and amt
-    let transfer = await op.transfer(req.body.ins, req.body.to, req.body.from, req.body.start, req.body.end)
-    console.log(transfer)
-    res.status(200).send({tansfer_status:'good'})
+    let transfer = await op.transfer(req.body.ins, req.body.to, req.body.from, req.body.indexes, req.body.amt)
+    console.log('new block number: ' + transfer)
+    res.status(200).send({block:transfer})
   })
 
   app.post("/deposit", async function(req, res) {
@@ -37,6 +37,7 @@ var appRouter = function (app, op) {
     if(account[0] === undefined) {
       coins = []
     } else {
+      //console.log(account[0].coinIDs[0].ID)
       coins = account[0].coinIDs
     }
     res.status(200).send(coins)
