@@ -460,9 +460,11 @@ class Operator {
         } else {
           coinst = t[0].coinIDs
         }
-
+        console.log(coinsf)
+        console.log(coinsf[0].Block)
+        console.log(block.txs[i].index)
         for(var u=0; u<block.txs[i].index.length; u++){
-          coinst.push({Block:block.BlockNumber, ID:[block.txs[i].index[u]]})
+          coinst.push({Block:coinsf[u].Block, ID:[block.txs[i].index[u]]})
         }
         console.log(coinst)
         console.log(coinsf)
