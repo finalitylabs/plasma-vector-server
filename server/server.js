@@ -47,9 +47,9 @@ async function main() {
 
   api(app, op)
 
-  var server = app.listen(8546, function () {
-    console.log("operator running on port.", server.address().port)
-  })
+  var server = app.listen(8546)
+  server.setTimeout(600000);
+  console.log("operator running on port.", server.address().port)  
 }
 
 main()
