@@ -28,7 +28,8 @@ async function main() {
 
   var whitelist = [
     'http://localhost:8080',
-    'http://localhost:3000'
+    'http://localhost:3000',
+    'http://*'
   ]
 
   var corsOptions = {
@@ -39,7 +40,8 @@ async function main() {
     credentials: true
   }
 
-  app.use(cors(corsOptions))
+  //app.use(cors(corsOptions))
+  app.use(cors({origin:'*'}))
   app.use(bodyParser.urlencoded({ extended: true }))
   app.use(bodyParser.json())
 
