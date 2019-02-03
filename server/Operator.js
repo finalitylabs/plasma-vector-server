@@ -209,14 +209,13 @@ function _getCheckpoint(index, checkpoints) {
 
 // (bytes) TX { prevBlock, from, to, amt, sig }
 // for now verifyTX also removes previous tx from accumulator
-async function verifyTX(tx, previousBlock, checkpoints, primes_i, primes_e, x, inputNum) {
+async function verifyCoin(tx, previousTX, checkpoints, primes_i, primes_e, x, range, rangeStart, a_i, a_e) {
   let vector = new Vector_H2P()
-  let previousTX
   let checkpoint
-  let A_i
-  let A_e
+  let x_i
+  let x_e
+
   if(tx.from !== '0x1e8524370B7cAf8dC62E3eFfBcA04cCc8e493FfE') { // handle transfer
-    previousTX = previousBlock.txs[tx.inputs[inputNum][1]]
     console.log('prev tx')
     console.log(previousTX)
     console.log('new tx ')
@@ -236,13 +235,16 @@ async function verifyTX(tx, previousBlock, checkpoints, primes_i, primes_e, x, i
 
     let i
     let oldPrimes
-    let x_i
-    let x_e
+
     // this does not work with merging/splitting!
-    for(var l=0; l<previousTX.amt; l++) {
-      i = _convertIndex(parseInt(previousTX.index[0][0])+l)
+    // potential fix
+    for(var g=0; g<range; g++){
+      i = _convertIndex(parseInt(rangeStart)+g)
       checkpoint = _getCheckpoint(i[0], checkpoints)
-      oldPrimes = vector.hash(i, previousTX, checkpoint, inputNum)
+      oldPrimes = vector.hash(i, previousTX, checkpoint)
+      console.log('old tx primes index')
+      console.log(parseInt(rangeStart)+g)
+      console.log(i)
       // delete previousPrimes product from x
       // delete p_i primes from x_i
       x_i = await _deleteElement(oldPrimes[0], primes_i, x, 'i') // dont calculate
@@ -251,28 +253,73 @@ async function verifyTX(tx, previousBlock, checkpoints, primes_i, primes_e, x, i
     }
 
     // TODO: this is very slow, use inclusion proofs
-    //A_i = g.modPow(x_i, N)
-    //A_e = g.modPow(x_e, N)
+    //a_i = g.modPow(x_i, N)
+    //a_e = g.modPow(x_e, N)
 
     // get new primes, todo, move this out to addBlock, this is called for every input but is always the same
     let newPrimes = []
-    for(var l=0; l<tx.amt; l++) {
-      i = _convertIndex(parseInt(tx.index[0][0])+l)
+    for(var l=0; l<range; l++) {
+      i = _convertIndex(parseInt(rangeStart)+l)
       checkpoint = _getCheckpoint(i[0], checkpoints)
-      newPrimes.push(vector.hash(i, tx, checkpoint, inputNum))
+      newPrimes.push(vector.hash(i, tx, checkpoint))
     }
-    return newPrimes
+
+    // add elements
+
+    for(var g=0; g<newPrimes.length; g++) {
+      for(var j=0; j<newPrimes[g][0].length; j++) {
+        x_i = x_i.multiply(newPrimes[g][0][j])
+        a_i = _addElement(newPrimes[g][0][j], a_i, N) // todo
+        await primes_i.insertOne({Prime:newPrimes[g][0][j].toString()})
+      }
+      console.log('added inclusion primes: ' +newPrimes[g][0][0]+' to: '+newPrimes[g][0][newPrimes[g][0].length-1])
+      for(var k=0; k<newPrimes[g][1].length; k++) {
+        x_e = x_e.multiply(newPrimes[g][1][k])
+        a_e = _addElement(newPrimes[g][1][k], a_e, N) // todo
+        await primes_e.insertOne({Prime:newPrimes[g][1][k].toString()})
+      }
+      console.log('added exclusion primes: ' +newPrimes[g][1][0]+' to: '+newPrimes[g][1][newPrimes[g][1].length-1])
+    }
+
+    await x.updateOne({ProductPointer:1}, {$set:{i: x_i.toString(), e: x_e.toString()}})
+
+    return [a_i, a_e]
   } else { // deposit tx
     // todo abi pack tx to bytes?
     let newPrimes = []
-    for(var l=0; l<tx.amt; l++) {
-      let i = _convertIndex(parseInt(tx.index[0][0])+l)
-      console.log(parseInt(tx.index[0][0])+l)
+    for(var l=0; l<range; l++) {
+      let i = _convertIndex(parseInt(rangeStart)+l)
+      console.log('new tx primes')
+      console.log(parseInt(rangeStart)+l)
       console.log(i)
       checkpoint = _getCheckpoint(i[0], checkpoints) // TODO: bug with first coin where index is 0 (generate primes doesn't have a 0 index, starts at)
-      newPrimes.push(vector.hash(i, tx, checkpoint, inputNum))
+      newPrimes.push(vector.hash(i, tx, checkpoint))
     }
-    return newPrimes
+
+    let oldX = x.find().limit(1).sort({$natural:-1})
+    oldX = await oldX.toArray()
+    x_i = bigInt(oldX[0].i)
+    x_e = bigInt(oldX[0].e)
+    // add elements
+
+    for(var g=0; g<newPrimes.length; g++) {
+      for(var j=0; j<newPrimes[g][0].length; j++) {
+        x_i = x_i.multiply(newPrimes[g][0][j])
+        a_i = _addElement(newPrimes[g][0][j], a_i, N) // todo
+        await primes_i.insertOne({Prime:newPrimes[g][0][j].toString()})
+      }
+      console.log('added inclusion primes: ' +newPrimes[g][0][0]+' to: '+newPrimes[g][0][newPrimes[g][0].length-1])
+      for(var k=0; k<newPrimes[g][1].length; k++) {
+        x_e = x_e.multiply(newPrimes[g][1][k])
+        a_e = _addElement(newPrimes[g][1][k], a_e, N) // todo
+        await primes_e.insertOne({Prime:newPrimes[g][1][k].toString()})
+      }
+      console.log('added exclusion primes: ' +newPrimes[g][1][0]+' to: '+newPrimes[g][1][newPrimes[g][1].length-1])
+    }
+
+    await x.updateOne({ProductPointer:1}, {$set:{i: x_i.toString(), e: x_e.toString()}})
+
+    return [a_i, a_e]
   }
   // todo check primes included and sig matches
   // todo delete verified tx previousPrimes from A
@@ -379,10 +426,6 @@ class Operator {
     let f = await accountdb.find({address: from})
     f = await f.toArray()
 
-    // console.log(t[0])
-    // console.log(f[0])
-    // console.log(weeee)
-
     let tx = {
       index: indices, // [[start,end],...]
       inputs: ins, // [[blockNum, txNum],...] TODO: expand to include multiple block inputs for multple coin tx
@@ -408,9 +451,9 @@ class Operator {
     let primes_e_db = this.db.collection('Primes_e')
     let prime_product = this.db.collection('x')
 
-    // primes
+    // primes [[i],[e]]
     let p_t
-
+    // accumulators
     let a_i
     let a_e
 
@@ -435,7 +478,18 @@ class Operator {
         let prevBlock = await blocksdb.find({BlockNumber:parseInt(block.BlockNumber)-1})
         prevBlock = await prevBlock.toArray()
 
-        p_t = await verifyTX(block.txs[i], prevBlock[0], this.checkpoints, primes_i_db, primes_e_db, prime_product, 0)
+        p_t = await verifyCoin(
+          block.txs[i],
+          null,
+          this.checkpoints,
+          primes_i_db,
+          primes_e_db,
+          prime_product,
+          block.txs[i].amt,
+          block.txs[i].index[0][0],
+          bigInt(prevBlock[0].A_i),
+          bigInt(prevBlock[0].A_e)
+        )
 
         if(t[0] === undefined) { // handle new account
           coinst = []
@@ -448,8 +502,8 @@ class Operator {
           await accountdb.updateOne({address: block.txs[i].to},{$set:{balance:newBal, coinIDs:coinst}})
         }
 
-        a_i = bigInt(prevBlock[0].A_i)
-        a_e = bigInt(prevBlock[0].A_e)
+        a_i = p_t[0]
+        a_e = p_t[1]
         //store deposit
         await depositsdb.insertOne({address: block.txs[i].to, finalized: true})
 
@@ -464,7 +518,7 @@ class Operator {
         console.log(coinsf[0].Block)
         console.log(block.txs[i].index)
         for(var u=0; u<block.txs[i].index.length; u++){
-          coinst.push({Block:coinsf[u].Block, ID:[block.txs[i].index[u]]})
+          coinst.push({Block:block.BlockNumber, ID:[block.txs[i].index[u]]})
         }
         console.log(coinst)
         console.log(coinsf)
@@ -500,16 +554,29 @@ class Operator {
         let parentBlocks = []
         let parentBlock
         for(var _y=0; _y<block.txs[i].index.length; _y++){
+          // might be a bug in the way account coin ranges are stored and how txs are looked up
           let parentBlock = await blocksdb.find({BlockNumber:parseInt(block.txs[i].inputs[_y][0])})
           parentBlock = await parentBlock.toArray()
-          console.log('found input: '+block.txs[i].index[_y][0] + ' parent block: '+ parentBlock[0].BlockNumber)
+          let range = block.txs[i].index[_y][1] - block.txs[i].index[_y][0]
+          console.log('found input: '+block.txs[i].index[_y][0] + ' parent block: '+ parentBlock[0].BlockNumber+ ' Range: '+range)
           // todo give inputs index in block, dont assume 0
-          p_t = await verifyTX(block.txs[i], parentBlock[0], this.checkpoints, primes_i_db, primes_e_db, prime_product, _y)   
+          p_t = await verifyCoin(
+            block.txs[i],
+            parentBlock[0].txs[0],
+            this.checkpoints,
+            primes_i_db,
+            primes_e_db,
+            prime_product,
+            range,
+            block.txs[i].index[_y][0],
+            bigInt(1),
+            bigInt(1)
+          )   
           // todo get, a_i and a_e from p_t
         }
 
-        a_i = bigInt(1)
-        a_e = bigInt(1)
+        a_i = p_t[0]
+        a_e = p_t[1]
 
         if(t[0] === undefined) { // handle new account
           await accountdb.insertOne({address: block.txs[i].to, balance:_amt, coinIDs:coinst})
@@ -525,30 +592,6 @@ class Operator {
         //a_i = incProof[0]
         //a_e = incProof[1]
       }
-      // add new elements
-
-      // move this in verify tx
-      let x = await prime_product.find({ProductPointer:1})
-      x = await x.toArray()
-      let _x_i = bigInt(x[0].i)
-      let _x_e = bigInt(x[0].e)
-
-      for(var g=0; g<p_t.length; g++) {
-        for(var j=0; j<p_t[g][0].length; j++) {
-          _x_i = _x_i.multiply(p_t[g][0][j])
-          a_i = _addElement(p_t[g][0][j], a_i, N)
-          await primes_i_db.insertOne({Prime:p_t[g][0][j].toString()})
-        }
-        console.log('added inclusion primes: ' +p_t[g][0][0]+' to: '+p_t[g][0][p_t[g][0].length-1])
-        for(var k=0; k<p_t[g][1].length; k++) {
-          _x_e = _x_e.multiply(p_t[g][1][k])
-          a_e = _addElement(p_t[g][1][k], a_e, N)
-          await primes_e_db.insertOne({Prime:p_t[g][1][k].toString()})
-        }
-        console.log('added exclusion primes: ' +p_t[g][1][0]+' to: '+p_t[g][1][p_t[g][1].length-1])
-      }
-
-      await prime_product.updateOne({ProductPointer:1}, {$set:{i: _x_i.toString(), e: _x_e.toString()}})
     }
 
     block.A_i = a_i.toString()

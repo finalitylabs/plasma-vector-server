@@ -44,7 +44,7 @@ function getNextPrimes(s, i, lastPrime, e) {
 }
 
 class Vector_H2P {
-  hash(index, input, checkpoint, indexNum) {
+  hash(index, input, checkpoint) {
     let h = utils.soliditySha3(
       { type: 'address', value: input.from },
       { type: 'address', value: input.to },
